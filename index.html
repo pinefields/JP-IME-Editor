@@ -1,0 +1,444 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>IME Editor</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+:root { --fs: 15px; --tab: 4; --bg: #fff; --fg: #000; --gutter: #f3f3f3; --gfg: #667; --mark: #8ab; --sel: #cce4ff; --cur: #f4f7fc; --ui: #f0f0f0; --uib: #c8c8c8; --accent: #0a4e9a; --eof: #0a0; --hl: #ffe08a;
+       --md-h: #1a4fb0; --md-code: #8a3b00; --md-codebg: #f3f1ea; --md-link: #0066cc; --md-quote: #777; --md-bullet: #c04000; }
+html.theme-dark { --bg: #1e1e1e; --fg: #e8e8e8; --gutter: #262626; --gfg: #9a9a9a; --mark: #5a7a8a; --sel: #264f78; --cur: #2a2a2a; --eof: #3cd43c; --hl: #7a6a1a;
+       --md-h: #7fb3ff; --md-code: #e8a86c; --md-codebg: #2b2b2b; --md-link: #6cb6ff; --md-quote: #9a9a9a; --md-bullet: #ff9d5c; }
+* { box-sizing: border-box; }
+html, body { height: 100%; margin: 0; font-family: "Meiryo UI", "Yu Gothic UI", "Segoe UI", system-ui, sans-serif; font-size: 13px; background: var(--ui); color: #222; }
+#app { display: flex; flex-direction: column; height: 100%; }
+/* タイトルバー(擬似) */
+#titlebar { display: flex; align-items: center; gap: 8px; padding: 3px 10px; background: #fff; border-bottom: 1px solid #ddd; font-size: 13px; color: #222; }
+#titlebar .icon { width: 16px; height: 16px; border: 1px solid #556; border-radius: 2px; background: linear-gradient(#fff, #dde); display: inline-block; }
+/* メニューバー */
+#menubar { display: flex; align-items: center; background: var(--ui); border-bottom: 1px solid var(--uib); user-select: none; }
+#menus { display: flex; }
+.mtop { padding: 4px 9px; cursor: default; border-radius: 2px; }
+.mtop:hover, .mtop.on { background: #cde3f8; }
+#mb-pos { margin-left: auto; padding: 0 14px; color: #333; font-size: 13px; letter-spacing: 1px; }
+.menu { position: fixed; z-index: 200; background: #f5f5f5; border: 1px solid #a0a0a0; box-shadow: 3px 3px 8px rgba(0,0,0,.3); padding: 3px 0; min-width: 260px; font-size: 13px; }
+.mitem { display: grid; grid-template-columns: 22px 1fr auto 16px; align-items: center; padding: 4px 8px 4px 4px; gap: 8px; white-space: nowrap; cursor: default; }
+.mitem:hover, .mitem.sel { background: #cde3f8; }
+.mitem.dis { color: #a0a0a0; } .mitem.dis:hover { background: transparent; } .mitem.dis.sel { background: transparent; }
+.mitem .chk { text-align: center; font-size: 11px; } .mitem .key { color: #333; padding-left: 20px; } .mitem.dis .key { color: #a0a0a0; } .mitem .arr { font-size: 9px; color: #333; }
+.msep { height: 1px; background: #c8c8c8; margin: 3px 6px; }
+/* アウトラインバー・ルーラー */
+#outline { background: #e6e6e6; color: #333; font-size: 12px; padding: 1px 10px; border-bottom: 1px solid var(--uib); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: default; }
+#outline.has { color: #06c; }
+#ruler { height: 16px; color: #333; background: #ececec; border-bottom: 1px solid var(--uib); overflow: hidden; position: relative; } #ruler canvas { display: block; position: absolute; left: 0; top: 0; }
+html.theme-dark #ruler { background: #333; color: #ddd; }
+/* 本体 */
+#main { flex: 1; display: flex; min-height: 0; }
+#editor { flex: 1; overflow: auto; background: var(--bg); position: relative; outline: none; cursor: text; min-width: 0; }
+#editor.nofocus .caret { opacity: .25; animation: none; }
+#text { font-family: "MS Gothic", "ＭＳ ゴシック", "BIZ UDGothic", Consolas, monospace; font-size: var(--fs); line-height: 1.45; color: var(--fg); min-height: 100%; min-width: max-content; padding-bottom: 50vh; tab-size: var(--tab); -moz-tab-size: var(--tab); }
+#text.wrap { min-width: 0; }
+.line { display: flex; white-space: pre; }
+#text.wrap .line .lc { white-space: pre-wrap; word-break: break-all; }
+.line .ln { flex: none; width: var(--lnw, 5ch); text-align: right; padding-right: .4em; color: var(--gfg); background: var(--gutter); user-select: none; border-right: 1px solid var(--uib); margin-right: .6em; }
+.line.bm .ln { background: #ffd34d; color: #000; }
+#text.noln .line .ln { width: 0; padding: 0; margin-right: .4em; border: none; }
+.line .lc { flex: 1; min-height: 1.45em; position: relative; }
+.line.cur .lc { background: var(--cur); box-shadow: inset 0 -1px 0 var(--mark); }
+#text.nocur .line.cur .lc { background: transparent; box-shadow: none; }
+.sel { background: var(--sel); }
+.hl { background: var(--hl); }
+.zs { outline: 1px dotted var(--mark); outline-offset: -2px; }
+.tab { position: relative; } .tab::before { content: '^'; position: absolute; left: 0; top: 0; color: var(--mark); font-size: .8em; }
+#text.nomarks .zs { outline: none; } #text.nomarks .tab::before { display: none; }
+.eol, .eof { color: var(--mark); user-select: none; } .eof { color: var(--eof); font-size: .8em; vertical-align: middle; }
+#text.nomarks .eol, #text.nomarks .eof { display: none; }
+.caret { display: inline-block; width: 2px; height: 1.2em; background: var(--fg); vertical-align: text-bottom; margin-right: -2px; animation: blink 1s steps(1) infinite; }
+@keyframes blink { 50% { opacity: 0; } }
+.pre { border-bottom: 2px dotted var(--fg); } .pre-seg { border-bottom: 2px solid var(--fg); }
+.pre-focus { background: var(--accent); color: #fff; border-bottom: 2px solid var(--accent); }
+/* Markdown ハイライト */
+.md-h1, .md-h2, .md-h3, .md-h4, .md-h5, .md-h6 { color: var(--md-h); font-weight: bold; }
+.md-code, .md-fence { color: var(--md-code); background: var(--md-codebg); } .md-icode { color: var(--md-code); background: var(--md-codebg); }
+.md-link, .md-img { color: var(--md-link); text-decoration: underline; }
+.md-strong { font-weight: bold; } .md-em { font-style: italic; } .md-del { text-decoration: line-through; }
+.md-quote, .md-pipe { color: var(--md-quote); } .md-bullet, .md-task { color: var(--md-bullet); font-weight: bold; } .md-hr { color: var(--md-quote); }
+/* プレビュー */
+#preview { width: 45%; border-left: 1px solid var(--uib); overflow: auto; background: var(--bg); color: var(--fg); }
+#preview .md { max-width: none; padding: 10px 22px; }
+#kb { position: fixed; left: -9999px; top: 0; width: 10px; height: 10px; opacity: 0; }
+/* 候補ウィンドウ / 推測候補 */
+#cand, #pred { position: fixed; display: none; z-index: 50; background: #fff; color: #000; border: 1px solid #888; box-shadow: 2px 3px 8px rgba(0,0,0,.25); font-family: "MS Gothic", "ＭＳ ゴシック", "BIZ UDGothic", Consolas, monospace; font-size: var(--fs); min-width: 12em; max-width: 60vw; }
+#cand ol, #pred ol { list-style: none; margin: 0; padding: 2px 0; }
+#cand li, #pred li { padding: 1px 8px 1px 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: default; display: flex; gap: .6em; align-items: baseline; }
+#cand li.on, #pred li.on { background: var(--accent); color: #fff; }
+#cand li .n { color: #888; width: 1.2em; text-align: right; } #cand li.on .n { color: #cde; }
+#cand li .cm { color: #777; font-size: .8em; overflow: hidden; text-overflow: ellipsis; } #cand li.on .cm { color: #dde; }
+#cand .pg, #pred .hint { text-align: right; color: #777; font-size: .75em; padding: 1px 6px; border-top: 1px solid #ddd; }
+#pred { background: #fffbe6; } #pred li { padding: 0 8px; } #pred .lrn { color: #c60; font-size: .75em; }
+/* ステータスバー */
+#status { display: flex; gap: 14px; align-items: center; padding: 2px 8px; background: var(--ui); border-top: 1px solid var(--uib); font-size: 12px; color: #333; white-space: nowrap; overflow: hidden; }
+#status span { flex: none; } #st-msg { flex: 1; color: #a30; overflow: hidden; text-overflow: ellipsis; }
+#st-ime { cursor: pointer; background: var(--accent); color: #fff; padding: 0 8px; border-radius: 3px; min-width: 3em; text-align: center; font-weight: bold; } #st-ime.off { background: #999; }
+#st-mic { cursor: pointer; padding: 0 6px; border-radius: 3px; opacity: .55; } #st-mic.on { opacity: 1; background: #c62828; color: #fff; } #st-mic.sound { background: #e53935; box-shadow: 0 0 6px #e53935; }
+.pre-speech { color: #555; border-bottom: 1px dashed #888; background: rgba(120,120,120,.10); }
+/* ダイアログ */
+.dialog { display: none; position: fixed; z-index: 100; top: 60px; left: 50%; transform: translateX(-50%); background: #f0f0f0; border: 1px solid #777; box-shadow: 3px 4px 14px rgba(0,0,0,.35); padding: 0 0 10px; min-width: 380px; max-width: 92vw; max-height: calc(100vh - 90px); overflow: auto; color: #222; }
+.dialog h3 { margin: 0 0 10px; font-size: 13px; background: #fff; padding: 5px 10px; border-bottom: 1px solid #ccc; display: flex; font-weight: normal; }
+.dialog h3 .close { margin-left: auto; cursor: pointer; border: none; background: none; font-size: 13px; }
+.dialog .body { padding: 4px 14px; }
+.dialog label { display: block; margin: 4px 0; }
+.dialog input[type=text], .dialog input[type=number], .dialog select { font-size: 13px; padding: 2px 4px; }
+.dialog button, .dialog select, .dialog input[type=text], .dialog input[type=number] { font-family: inherit; font-size: 13px; }
+.dialog .btns button, .dialog .colbtns button, .dialog .body > button, .dialog .body button:not(.colorbtn):not(.colsys):not(.dictdel):not(.close) { height: 27px; line-height: 1; box-sizing: border-box; vertical-align: middle; }
+#colGrid button { height: 20px !important; }
+.dialog .btns { margin-top: 10px; text-align: right; padding: 0 14px; } .dialog .btns button, .dialog button { padding: 3px 14px; margin-left: 6px; min-width: 6em; }
+.dialog table { border-collapse: collapse; width: 100%; } .dialog td, .dialog th { border-bottom: 1px solid #ddd; padding: 2px 6px; text-align: left; font-weight: normal; }
+.dim { color: #777; font-size: 12px; }
+#dsList { border: 1px solid #999; background: #fff; height: 360px; overflow-y: scroll; }
+.dsrow { display: grid; grid-template-columns: 22px 1fr 150px; align-items: center; cursor: default; font-size: 13px; }
+.dsrow.on .dslbl { background: #0a4e9a; color: #fff; } .dslbl { padding: 2px 4px; white-space: nowrap; overflow: hidden; }
+.dssample { padding: 2px 6px; font-family: "MS Gothic", "ＭＳ ゴシック", Consolas, monospace; white-space: pre; overflow: hidden; }
+.setwrap { display: grid; grid-template-columns: 170px 1fr; gap: 14px; }
+#setTree { border: 1px solid #999; background: #fff; height: 420px; overflow-y: auto; padding: 3px 0; user-select: none; }
+#setTree div { padding: 2px 8px; cursor: default; white-space: nowrap; } #setTree div.sub { padding-left: 26px; } #setTree div.on { background: #0a4e9a; color: #fff; } #setTree div.hide { display: none; }
+#setPages { min-height: 440px; } .setpage { display: none; padding-top: 18px; } .setpage.on { display: block; }
+.symgrid { display: grid; grid-template-columns: max-content max-content max-content max-content; gap: 5px 10px; align-items: center; margin: 4px 0; } .symgrid select { min-width: 11em; margin-right: 18px; } .symgrid.sym2 { grid-template-columns: repeat(5, max-content); gap: 4px 6px; } .symgrid.sym2 select { min-width: 7.6em; margin-right: 0; }
+#kmline { display: none; position: fixed; z-index: 50; height: 26px; align-items: center; background: var(--bg); color: var(--fg); border-top: 1px solid #8884; font-family: var(--font, monospace); padding: 0 6px; box-sizing: border-box; } #kmline input { flex: 1; border: 0; outline: 0; background: transparent; color: inherit; font: inherit; }
+#editor.blockcaret .caret { width: .6em; margin-right: -.6em; opacity: .45; animation: none; } #st-keymap { font-weight: bold; }
+.setpage fieldset { border: 1px solid #bbb; padding: 6px 12px 10px; margin: 0 0 10px; }
+.setpage[data-page=design] fieldset > div { margin: 6px 0; }
+.dialog button.colorbtn { display: block; width: 110px; height: 26px; margin: 3px 0 0; padding: 0; border: 1px solid #555; box-shadow: inset 0 0 0 3px #f0f0f0; cursor: pointer; font-size: 11px; }
+.setpage .dis { opacity: .4; pointer-events: none; }
+#dlgColor { z-index: 200; min-width: 0; width: 664px; max-width: none; max-height: none; overflow: visible; top: 130px; padding-bottom: 12px; }
+#dlgColor .body { padding-right: 16px; } .colright { flex: none; width: 370px; } .colleft { flex: none; }
+.colwrap { display: flex; gap: 18px; } .colleft { width: 238px; display: flex; flex-direction: column; } .colbtns { margin-top: auto; padding-top: 10px; text-align: center; } .dialog .colbtns button { margin: 0 3px; }
+#colGrid { display: grid; grid-template-columns: repeat(8, 26px); gap: 4px; }
+#colGrid button { width: 26px; height: 20px; min-width: 0; margin: 0; padding: 0; border: 1px solid #444; cursor: pointer; } #colGrid button.on { outline: 2px dotted #000; outline-offset: 1px; box-shadow: inset 0 0 0 2px #fff; }
+.dialog button.colsys { flex: 1; min-width: 0; margin: 0; padding: 2px 0; font-size: 11px; border: 1px solid #555; cursor: pointer; } button.colsys.on { outline: 2px dotted #000; outline-offset: 1px; }
+#colSV { border: 1px solid #777; cursor: crosshair; } #colL { cursor: ns-resize; }
+.colfields { display: flex; gap: 10px; margin-top: 8px; align-items: flex-start; } #colNow { width: 70px; height: 40px; border: 1px solid #444; }
+.colnums { display: grid; grid-template-columns: 1fr 1fr; gap: 3px 10px; flex: 1; } .dialog .colnums label { margin: 0; display: flex; justify-content: flex-end; align-items: center; gap: 4px; white-space: nowrap; font-size: 12px; } .colnums input { width: 4.2em; box-sizing: border-box; }
+.dictrow { display: block; padding: 2px 0; } .dictnote { margin-left: 1.6em; font-size: 90%; } .dialog button.dictdel { min-width: 0; padding: 0 8px; font-size: 90%; } #dictImportStatus .err { color: #c62828; }
+.cliprow { padding: 3px 6px; border-bottom: 1px solid #ddd; cursor: pointer; white-space: pre; overflow: hidden; text-overflow: ellipsis; font-family: "MS Gothic", monospace; } .cliprow:hover { background: #cde3f8; }
+#dlgHelp table { font-size: 12px; flex: 1; } #dlgHelp td:first-child { color: #036; width: 45%; } .cols { display: flex; gap: 24px; align-items: flex-start; } .cols > div { min-width: 220px; }
+/* 秀丸風 検索/置換ダイアログ */
+#dlgFind { min-width: 560px; }
+#dlgFind .frow { display: grid; grid-template-columns: 5em 1fr 7em; gap: 6px; align-items: center; margin: 6px 0; }
+#dlgFind .frow input[type=text] { width: 100%; font-family: "MS Gothic", monospace; }
+#dlgFind .replOnly { display: none; } #dlgFind.repl .replOnly { display: grid; } #dlgFind.repl .replOnlyInline { display: inline; } #dlgFind .replOnlyInline { display: none; }
+#dlgFind .opts { display: grid; grid-template-columns: 1fr 1fr; gap: 0 14px; margin: 6px 0; } #dlgFind .opts label { margin: 2px 0; }
+#dlgFind .fbtns { display: flex; flex-direction: column; gap: 4px; } #dlgFind .fbtns button { min-width: 7em; margin: 0; }
+kbd { background: #eee; border: 1px solid #bbb; border-radius: 3px; padding: 0 4px; font-family: inherit; }
+@media print { #titlebar, #menubar, #outline, #ruler, #status, #preview, .dialog, #cand, #pred { display: none !important; } #editor { overflow: visible; } #text { color: #000; } .caret, .eol, .eof { display: none; } .line .ln { background: none; } }
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="titlebar"><span class="icon"></span><span id="mb-title">(無題)</span><span> - IME Editor</span></div>
+  <div id="menubar"><div id="menus"></div><span id="mb-pos">1: 1</span></div>
+  <div id="outline">（見出し無し）</div>
+  <div id="ruler"></div>
+  <div id="main">
+    <div id="editor"><div id="text"></div></div>
+    <div id="preview" style="display:none"></div>
+  </div>
+  <div id="status">
+    <span id="st-ime" title="クリックでIME ON/OFF">あ</span>
+    <span id="st-mic" title="音声入力 (クリックで ON/OFF, Ctrl+Alt+M)">🎤</span>
+    <span id="st-pos">1 行 1 桁</span>
+    <span id="st-info"></span>
+    <span id="st-msg"></span>
+    <span id="st-dict"></span>
+    <span id="st-mode">挿入</span>
+    <span id="st-eol">CR+LF</span>
+    <span id="st-enc">UTF-8</span>
+  </div>
+</div>
+<textarea id="kb" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"></textarea>
+<div id="cand"></div>
+<div id="pred"></div>
+<input type="file" id="fileInput" style="display:none">
+
+<!-- 検索/置換 (秀丸風) -->
+<div class="dialog" id="dlgFind"><h3><span id="findTitle">検索</span><button class="close">✕</button></h3>
+  <div class="body" style="display:flex;gap:14px">
+    <div style="flex:1">
+      <div class="frow"><span>検索(S):</span><input type="text" id="findText"><select id="findHist"><option value="">履歴</option></select></div>
+      <div class="frow replOnly"><span>置換(R):</span><input type="text" id="replText"><span class="dim">\0〜\9 でグループ参照</span></div>
+      <div class="opts">
+        <label><input type="checkbox" id="fWord"> 単語の検索(W)</label>
+        <label><input type="checkbox" id="fCase"> 大文字/小文字の区別(C)</label>
+        <label><input type="checkbox" id="fRegex"> 正規表現(E)</label>
+        <label><input type="checkbox" id="fFuzzy"> あいまい検索(Z)</label>
+        <label><input type="checkbox" id="fHl"> 検索文字列の強調(H)</label>
+        <label class="replOnlyInline"><input type="checkbox" id="fInSel"> 選択した範囲(I) (全置換)</label>
+      </div>
+      <div class="dim">正規表現は JavaScript 形式 (例: 血圧\d+、^#、(収縮|拡張)期)。改行をまたぐ検索はできません。</div>
+    </div>
+    <div class="fbtns">
+      <button id="fUp">上検索(U)</button><button id="fDown">下検索(D)</button>
+      <button id="fReplace" class="replOnlyInline">置換(R)</button><button id="fReplaceAll" class="replOnlyInline">全置換(A)</button>
+      <button data-close>キャンセル</button>
+    </div>
+  </div>
+</div>
+
+<div class="dialog" id="dlgGoto"><h3>指定行へジャンプ<button class="close">✕</button></h3><div class="body"><label>行番号(L): <input type="number" id="gotoText" min="1" style="width:8em"></label></div><div class="btns"><button id="gotoOk">OK</button><button data-close>キャンセル</button></div></div>
+
+<div class="dialog" id="dlgWordReg"><h3>単語登録 (Ctrl+F7)<button class="close">✕</button></h3><div class="body">
+  <label>単語(W) <input type="text" id="wrWord" style="width:24em"></label>
+  <label>読み(Y) <input type="text" id="wrYomi" style="width:24em" placeholder="ひらがな"></label>
+  <label>品詞(P) <select id="wrPos"><option>名詞</option><option>固有名詞</option><option>人名</option><option>地名</option><option>組織</option><option>サ変名詞</option><option>形容動詞</option><option>副詞</option><option>連体詞</option><option>記号</option></select></label>
+  <label>コメント(C) <input type="text" id="wrCm" style="width:24em"></label></div>
+  <div class="btns"><button id="wordRegOk">登録</button><button data-close>キャンセル</button></div></div>
+
+<div class="dialog" id="dlgUserDict"><h3>ユーザー辞書<button class="close">✕</button></h3><div class="body"><div id="userdictList"></div></div>
+  <div class="btns"><button id="userdictExport">書き出し(ATOK単語ファイル形式)</button> <label style="display:inline">取り込み <input type="file" id="userdictImport" accept=".txt"></label></div></div>
+
+<div class="dialog" id="dlgDicts" style="min-width:640px"><h3>変換辞書<button class="close">✕</button></h3><div class="body"><div id="dictList"></div>
+  <hr>
+  <div><button id="dictImportBtn" style="margin-left:0">辞書ファイルの取り込み(I)...</button> <input type="file" id="dictImportFile" multiple accept=".dic,.DIC" style="display:none">
+    <span class="dim">お手持ちの ATOK の辞書ファイル(.DIC)を選ぶと、この PC のブラウザ内で変換して保存します(複数選択可)。</span></div>
+  <div id="dictImportStatus" class="dim" style="min-height:1.4em;margin-top:4px"></div>
+  <div class="dim" style="margin-top:6px">チェックの変更は [OK] で反映されます。取り込みと削除はその場で実行されます。　学習データ: <button id="learnClear">消去</button></div></div>
+  <div class="btns"><button id="dictsOk">OK</button><button data-close>キャンセル</button></div></div>
+
+<div class="dialog" id="dlgSort"><h3>ソート<button class="close">✕</button></h3><div class="body">
+  <label><input type="checkbox" id="sortDesc"> 降順(D)</label><label><input type="checkbox" id="sortNum"> 数値として比較(N)</label><label><input type="checkbox" id="sortIcase"> 大文字/小文字を区別しない(C)</label><label><input type="checkbox" id="sortUniq"> 重複行を削除(U)</label>
+  <div class="dim">選択範囲(なければ全体)の行を並べ替えます</div></div><div class="btns"><button id="sortOk">OK</button><button data-close>キャンセル</button></div></div>
+
+<div class="dialog" id="dlgCase"><h3>大文字/小文字の変換<button class="close">✕</button></h3><div class="body">
+  <label><input type="radio" name="caseMode" value="upper" checked> 大文字に(U)</label><label><input type="radio" name="caseMode" value="lower"> 小文字に(L)</label><label><input type="radio" name="caseMode" value="cap"> 単語の先頭のみ大文字に(C)</label></div>
+  <div class="btns"><button id="caseOk">OK</button><button data-close>キャンセル</button></div></div>
+
+<div class="dialog" id="dlgWidth"><h3>半角/全角変換<button class="close">✕</button></h3><div class="body">
+  <label><input type="radio" name="widthDir" value="han" checked> 半角に(H)</label><label><input type="radio" name="widthDir" value="zen"> 全角に(Z)</label><hr>
+  <label><input type="checkbox" id="wAlpha" checked> 英数字(A)</label><label><input type="checkbox" id="wSym" checked> 記号(S)</label><label><input type="checkbox" id="wSpace" checked> 空白(P)</label><label><input type="checkbox" id="wKana"> カタカナ(K)</label></div>
+  <div class="btns"><button id="widthOk">OK</button><button data-close>キャンセル</button></div></div>
+
+<div class="dialog" id="dlgClip"><h3>クリップボード履歴<button class="close">✕</button></h3><div class="body"><div id="clipList"></div><div class="dim">クリックで貼り付け</div></div></div>
+<div class="dialog" id="dlgMarks"><h3>マーク一覧<button class="close">✕</button></h3><div class="body"><div id="markList"></div></div></div>
+<div class="dialog" id="dlgHeadings"><h3>見出し一覧 (Markdown)<button class="close">✕</button></h3><div class="body"><div id="headingList"></div></div></div>
+
+<div class="dialog" id="dlgSettings" style="width:860px"><h3><span id="setTitle">動作環境</span><button class="close">✕</button></h3><div class="body">
+  <div class="setwrap">
+    <div><div>設定の対象(L):</div>
+      <div id="setTree">
+        <div data-page="font" data-g="ft">フォント</div>
+        <div data-page="layout" data-g="ft">体裁</div><div data-page="tab" data-g="ft" class="sub">タブ</div><div data-page="indent" data-g="ft" class="sub">インデント</div>
+        <div data-page="design" data-g="ft">デザイン</div><div data-page="show1" data-g="ft" class="sub">表示1</div><div data-page="show2" data-g="ft" class="sub">表示2</div>
+        <div data-page="file" data-g="env">ファイル</div>
+        <div data-page="view" data-g="env">表示/操作</div>
+        <div data-page="md" data-g="env">Markdown</div>
+        <div data-page="ime" data-g="env">かな漢字変換 (IME)</div>
+        <div data-page="speech" data-g="env">音声入力</div>
+        <div data-page="env" data-g="env">環境</div>
+      </div></div>
+    <div id="setPages">
+      <div class="setpage" data-page="font"><fieldset><legend>フォント</legend>
+        <label>文字サイズ <input type="number" id="set-fontSize" min="8" max="40" style="width:5em"> px</label></fieldset></div>
+      <div class="setpage" data-page="layout"><fieldset><legend>折り返し</legend>
+        <label><input type="radio" name="wrapmode" value="win"> ウィンドウ幅に合わせる(U)</label>
+        <label><input type="radio" name="wrapmode" value="max"> 最大(M)</label>
+        <input type="checkbox" id="set-wrap" style="display:none"></fieldset></div>
+      <div class="setpage" data-page="tab"><fieldset><legend>タブの文字数(B)</legend>
+        <label><input type="radio" name="tabw" value="2"> 2</label>
+        <label><input type="radio" name="tabw" value="4"> 4</label>
+        <label><input type="radio" name="tabw" value="8"> 8</label>
+        <label><input type="radio" name="tabw" value="c"> 指定 <input type="number" id="set-tabWidth" min="1" max="16" style="width:5em;margin-left:3em"></label></fieldset>
+        <label><input type="checkbox" id="set-tabSpaces"> タブキーで空白入力(E)</label></div>
+      <div class="setpage" data-page="indent"><fieldset><legend><label style="margin:0;display:inline"><input type="checkbox" id="set-autoIndent"> 自動インデント(I)</label></legend>
+        <div class="dim">改行したとき、前の行と同じ字下げで始めます。</div></fieldset></div>
+      <div class="setpage" data-page="design">
+        <div style="display:flex;gap:14px">
+          <div style="flex:1"><div>場所の一覧(P):</div><div id="dsList"></div></div>
+          <div style="width:200px"><fieldset><legend>プロパティ(C)</legend>
+            <div id="dsFgRow">文字の色(E):<button id="dsFg" class="colorbtn"></button></div>
+            <div id="dsBgRow">背景の色(B):<button id="dsBg" class="colorbtn"></button></div>
+            <div id="dsBoldRow">スタイル(Y):<select id="dsBold" style="width:100%"><option value="normal">普通</option><option value="bold">太字</option></select></div></fieldset>
+            <button id="dsReset" style="margin:10px 0 0 0;width:100%">リセット/統一(R)&gt;&gt;</button>
+            <div style="margin-top:10px">保存/読込(V)&gt;&gt;<select id="dsPreset" style="width:100%"></select></div></div>
+        </div>
+        <div class="dim" style="margin-top:6px">チェックは表示の ON/OFF です(表示1・表示2 と連動)。色を付けていない項目はテーマの既定色になります。</div></div>
+      <div class="setpage" data-page="show1">
+        <label><input type="checkbox" id="dshow-eol"> 改行文字を記号で表示(R)</label>
+        <label><input type="checkbox" id="dshow-eof"> EOF(ファイルの末尾)表示(E)</label>
+        <label><input type="checkbox" id="dshow-tab"> タブ文字を記号で表示(B)</label>
+        <label><input type="checkbox" id="dshow-zs"> 全角空白を記号で表示(Z)</label>
+        <div class="dim" style="margin-top:8px">表示メニューの「全角空白/タブ/改行の表示」が OFF のときは、すべて表示されません。</div></div>
+      <div class="setpage" data-page="show2">
+        <fieldset><legend><label style="margin:0;display:inline"><input type="checkbox" id="set-ruler"> ルーラー(U)</label></legend><div class="dim">10 単位の目盛りを表示します。</div></fieldset>
+        <fieldset><legend><label style="margin:0;display:inline"><input type="checkbox" id="set-lineNumbers"> 行番号表示(N)</label></legend><div class="dim">改行だけを数えます(エディタ的)。</div></fieldset>
+        <fieldset><legend><label style="margin:0;display:inline"><input type="checkbox" id="set-curLine"> カーソル行(C)</label></legend><div class="dim">色は「デザイン」のカーソル行で指定します。</div></fieldset></div>
+      <div class="setpage" data-page="view">
+        <label><input type="checkbox" id="set-statusBar"> ステータスバー</label>
+        <label>テーマ (色を付けていない項目の既定色) <select id="set-theme"><option value="light">ライト</option><option value="dark">ダーク</option></select></label></div>
+      <div class="setpage" data-page="file">
+        <label>新規ファイルの文字コード <select id="set-newEncoding"><option value="utf8">UTF-8</option><option value="sjis">Shift-JIS</option><option value="euc">EUC</option><option value="jis">JIS</option><option value="utf16le">UTF-16</option></select></label>
+        <label>新規ファイルの改行 <select id="set-newEol"><option value="&#13;&#10;">CR+LF</option><option value="&#10;">LF</option><option value="&#13;">CR</option></select></label>
+        <label><input type="checkbox" id="set-bom"> UTF-8 の新規ファイルに BOM を付ける</label></div>
+      <div class="setpage" data-page="md">
+        <label><input type="checkbox" id="set-mdAuto"> .md ファイルで Markdown モードを自動的に有効にする</label>
+        <label><input type="checkbox" id="set-mdPreview"> Markdown プレビューを表示</label></div>
+      <div class="setpage" data-page="ime"><fieldset><legend>入力既定 (変換時のデフォルト)</legend>
+        <div class="symgrid">
+          <span>句点</span><select id="set-kuten"><option value="。">。 (全角)</option><option value="｡">｡ (半角)</option><option value="．">． (全角ピリオド)</option><option value=".">. (半角ピリオド)</option></select>
+          <span>読点</span><select id="set-touten"><option value="、">、 (全角)</option><option value="､">､ (半角)</option><option value="，">， (全角カンマ)</option><option value=",">, (半角カンマ)</option></select>
+          <span>かぎ括弧</span><select id="set-symKagi"><option value="「」">「」 (全角)</option><option value="｢｣">｢｣ (半角)</option></select>
+          <span>丸括弧</span><select id="set-symParen"><option value="（）">（） (全角)</option><option value="()">() (半角)</option></select>
+          <span>長音・ハイフン</span><select id="set-symChouon"><option value="ー">ー (全角)</option><option value="ｰ">ｰ (半角)</option><option value="-">- (半角ハイフン)</option></select>
+          <span>中点 ( / キー)</span><select id="set-symNakaten"><option value="・">・ (全角)</option><option value="･">･ (半角)</option><option value="／">／ (全角スラッシュ)</option><option value="/">/ (半角スラッシュ)</option></select>
+          <span>感嘆符・疑問符</span><select id="set-symExq"><option value="！？">！？ (全角)</option><option value="!?">!? (半角)</option></select>
+          <span>波ダッシュ</span><select id="set-symTilde"><option value="〜">〜 (全角)</option><option value="~">~ (半角)</option></select>
+          <span>コロン・セミコロン</span><select id="set-symColon"><option value="：；">：； (全角)</option><option value=":;">:; (半角)</option></select>
+        </div>
+        <div class="symgrid sym2">
+          <select id="set-symAt" data-han="1"><option value="＠">＠ (全角)</option><option value="@">@ (半角)</option></select>
+          <select id="set-symHash" data-han="1"><option value="＃">＃ (全角)</option><option value="#"># (半角)</option></select>
+          <select id="set-symDollar" data-han="1"><option value="＄">＄ (全角)</option><option value="$">$ (半角)</option></select>
+          <select id="set-symPercent" data-han="1"><option value="％">％ (全角)</option><option value="%">% (半角)</option></select>
+          <select id="set-symAmp" data-han="1"><option value="＆">＆ (全角)</option><option value="&amp;">&amp; (半角)</option></select>
+          <select id="set-symAster" data-han="1"><option value="＊">＊ (全角)</option><option value="*">* (半角)</option></select>
+          <select id="set-symPlus" data-han="1"><option value="＋">＋ (全角)</option><option value="+">+ (半角)</option></select>
+          <select id="set-symEqual" data-han="1"><option value="＝">＝ (全角)</option><option value="=">= (半角)</option></select>
+          <select id="set-symLtGt" data-han="1"><option value="＜＞">＜＞ (全角)</option><option value="&lt;&gt;">&lt;&gt; (半角)</option></select>
+          <select id="set-symBrace" data-han="1"><option value="｛｝">｛｝ (全角)</option><option value="{}">{} (半角)</option></select>
+          <select id="set-symUnder" data-han="1"><option value="＿">＿ (全角)</option><option value="_">_ (半角)</option></select>
+          <select id="set-symCaret" data-han="1"><option value="＾">＾ (全角)</option><option value="^">^ (半角)</option></select>
+          <select id="set-symBar" data-han="1"><option value="｜">｜ (全角)</option><option value="|">| (半角)</option></select>
+          <select id="set-symYen" data-han="2"><option value="＼">＼ (全角)</option><option value="￥">￥ (全角円記号)</option><option value="\">\ (半角)</option></select>
+          <select id="set-symDq" data-han="1"><option value="”">” (全角)</option><option value="&quot;">&quot; (半角)</option></select>
+          <select id="set-symSq" data-han="1"><option value="’">’ (全角)</option><option value="&#x27;">&#x27; (半角)</option></select>
+          <select id="set-symBq" data-han="1"><option value="｀">｀ (全角)</option><option value="`">` (半角)</option></select>
+        </div>
+        <div style="margin:4px 0"><button id="symAllZen" style="min-width:0;padding:1px 10px">すべて全角</button> <button id="symAllHan" style="min-width:0;padding:1px 10px">すべて半角</button></div>
+        <div class="dim" style="margin:2px 0 6px">長音は、かなの直後では常に「ー」になります(例: らーめん)。設定は数字・英字の後や単独で打ったときに使われます。</div>
+        <label><input type="checkbox" id="set-kataHankaku"> カタカナを半角(ｶﾅ)で確定する</label>
+        <label><input type="checkbox" id="set-digitsZen"> 数字を全角で入力</label>
+        <label><input type="checkbox" id="set-alphaZen"> 英字(Shift入力)を全角で確定</label>
+        <label><input type="checkbox" id="set-spaceZen"> スペースキーで全角空白 (Shift+Space は半角)</label>
+</fieldset>
+        <label>起動時の入力モード <select id="set-startMode"><option value="hira">ひらがな</option><option value="kata">全角カタカナ</option><option value="hankata">半角カタカナ</option><option value="zenei">全角英数</option><option value="hanei">半角英数</option></select></label>
+        <label><input type="checkbox" id="set-imeOnStart"> 起動時に IME を ON にする</label>
+        <label><input type="checkbox" id="set-predictAuto"> 推測候補を自動表示</label>
+        <label>候補ウィンドウの表示数 <input type="number" id="set-candPerPage" min="5" max="9" style="width:4em"></label></div>
+      <div class="setpage" data-page="env"><fieldset><legend>表示言語</legend>
+        <label>表示言語/Display language : <select id="set-lang" data-noi18n><option value="ja">日本語/Japanese</option><option value="en">英語/English</option></select></label></fieldset>
+        <fieldset><legend>キー配列</legend>
+        <label>エディタのキー配列 : <select id="set-keymap"><option value="hidemaru">秀丸エディタ (標準)</option><option value="vscode">Visual Studio Code</option><option value="atom">Atom</option><option value="emacs">Emacs</option><option value="vim">vi / Vim</option><option value="nano">nano</option><option value="vz">VZ Editor</option></select></label>
+        <div class="dim" style="margin:4px 0 0">選んだ配列のキー割り当ては F1 (その他→キー割り当て) で確認できます。かな漢字変換の入力中・変換中は、どの配列でも IME (ATOK 準拠) のキーが優先されます。<br>Ctrl+N・Ctrl+T・Ctrl+W は通常のタブではブラウザが処理するため、エディタで使うには全画面表示 (F11) にしてください。</div></fieldset></div>
+      <div class="setpage" data-page="speech"><fieldset><legend>音声入力 (Web Speech API)</legend>
+        <label>認識方式 <select id="set-speechMode"><option value="local">端末内のみ (音声を外部に送らない)</option><option value="auto">端末内があれば使い、無ければクラウド</option><option value="cloud">クラウド (Google / Microsoft のサーバー)</option></select></label>
+        <div class="dim" style="margin:2px 0 4px 1.6em"><span id="speechStatus">確認中…</span> <button id="speechInstall" style="display:none;min-width:0;padding:1px 8px">言語パックをインストール</button></div>
+        <label><input type="checkbox" id="set-speechContinuous"> 連続認識 (OFF: 一言ごとに止まる)</label>
+        <label><input type="checkbox" id="set-speechCommands"> 音声コマンド (「かいぎょう」→改行、文末の「まる」→。「てん」→、)</label>
+        <label><input type="checkbox" id="set-speechKuten"> 認識が確定するたびに文末へ句点を付ける</label></fieldset></div>
+    </div>
+  </div></div>
+  <div class="btns"><button id="settingsOk">OK</button><button data-close>キャンセル</button></div></div>
+
+<div class="dialog" id="dlgColor"><h3>色の指定</h3><div class="body"><div class="colwrap">
+  <div class="colleft">
+    <div id="colGrid"></div>
+    <div style="display:flex;gap:4px;margin-top:6px"><button id="colSysBg" class="colsys">システム・背景色</button><button id="colSysFg" class="colsys">システム・文字色</button></div>
+    <div class="colbtns"><button id="colOk">OK</button><button id="colCancel">キャンセル</button></div>
+  </div>
+  <div class="colright">
+    <div style="display:flex;gap:10px"><canvas id="colSV" width="326" height="170"></canvas><canvas id="colL" width="30" height="170"></canvas></div>
+    <div class="colfields">
+      <div><div id="colNow"></div><div style="text-align:center;font-size:11px">色 | 純色</div></div>
+      <div class="colnums">
+        <label>色合い(E): <input id="colH" type="number" min="0" max="239"></label><label>赤(R): <input id="colR" type="number" min="0" max="255"></label>
+        <label>鮮やかさ(S): <input id="colS" type="number" min="0" max="240"></label><label>緑(G): <input id="colG" type="number" min="0" max="255"></label>
+        <label>明るさ(L): <input id="colLn" type="number" min="0" max="240"></label><label>青(B): <input id="colB" type="number" min="0" max="255"></label>
+        <span></span><label>RGB(1): <input id="colHex" type="text" maxlength="6" style="width:5.5em"></label>
+      </div>
+    </div>
+  </div>
+</div></div></div>
+
+<div class="dialog" id="dlgAbout"><h3>バージョン情報<button class="close">✕</button></h3><div class="body">
+  <p><b>IME Editor</b> 1.12<br>HTML + JavaScript 製、内蔵日本語IME(連文節変換)付きテキストエディタ</p>
+  <p class="dim">変換辞書: Mozc OSS 辞書 (BSD-3-Clause, Google) を同梱。ATOK の辞書ファイル(.DIC)は その他→変換辞書 から取り込めます<br>IMEキー: ATOK準拠、エディタキー: 秀丸準拠</p></div></div>
+
+<div class="dialog" id="dlgHelp" style="min-width:960px"><h3>キー割り当て (IME: ATOK準拠 / エディタ: 秀丸準拠)<button class="close">✕</button></h3><div class="body"><div id="kmHelp" data-noi18n></div>
+<div class="cols">
+<table>
+<tr><th colspan="2">IME (ATOKキー)</th></tr>
+<tr><td>Ctrl+Space / 変換キー / ステータスバー</td><td>IME ON/OFF (ONは変換キーでも)</td></tr>
+<tr><td>Alt+F / E / V / S / M / O、Alt 単独</td><td>メニューを開く (↑↓←→ で移動、Enter で実行、( ) 内の英字で直接選択、Esc で閉じる)</td></tr>
+<tr><td>Ctrl+Alt+M / 🎤(ステータスバー)</td><td>音声入力 ON/OFF (Web Speech API)</td></tr>
+<tr><td>文字列を選択して 変換 / Ctrl+Alt+R</td><td>選択範囲の再変換 (同音語の訂正。音声入力結果の修正に)</td></tr>
+<tr><td>無変換</td><td>あ→ア→ｱ 入力文字種切替 / 入力中は読みの文字種変換</td></tr>
+<tr><td>Shift+無変換</td><td>全角英数 ⇔ 半角英数</td></tr>
+<tr><td>Space / 変換 / ↓</td><td>変換、次候補 (2回目で候補一覧)</td></tr>
+<tr><td>↑</td><td>前候補</td></tr>
+<tr><td>Enter</td><td>全確定</td></tr>
+<tr><td>↓ (変換中)</td><td>注目文節を確定して次へ (部分確定)</td></tr>
+<tr><td>← →</td><td>注目文節の移動 (入力中はカーソル移動)</td></tr>
+<tr><td>Shift+← / Shift+→ (Ctrl+K / Ctrl+L)</td><td>文節を縮める / 伸ばす</td></tr>
+<tr><td>Backspace (変換中)</td><td>変換取消 (読みに戻る)</td></tr>
+<tr><td>Esc</td><td>候補一覧を閉じる / 入力取消</td></tr>
+<tr><td>Shift+Del</td><td>注目文節削除</td></tr>
+<tr><td>1〜9</td><td>候補一覧から番号で選択</td></tr>
+<tr><td>F6 / Ctrl+U</td><td>ひらがな変換</td></tr>
+<tr><td>F7 / Ctrl+I</td><td>カタカナ変換</td></tr>
+<tr><td>F8 / Ctrl+O</td><td>半角カタカナ変換</td></tr>
+<tr><td>F9 / Ctrl+P</td><td>全角英数 (連打で 小文字→大文字→先頭大文字)</td></tr>
+<tr><td>F10 / Ctrl+@</td><td>半角英数 (連打で同上)</td></tr>
+<tr><td>Tab</td><td>推測変換候補を選択 (Shift+Tab 逆順)</td></tr>
+<tr><td>Shift+Enter / Ctrl+Enter</td><td>推測変換の先頭候補で確定</td></tr>
+<tr><td>Ctrl+Backspace (確定直後)</td><td>確定取り消し (再変換)</td></tr>
+<tr><td>Ctrl+F7</td><td>単語登録</td></tr>
+<tr><td>@ で始めて英字</td><td>医療辞書の略語 (@agn → 急性糸球体腎炎)</td></tr>
+<tr><td>Shift+英字</td><td>英字入力 (そのまま Space で ICD/識別コード変換)</td></tr>
+</table>
+<table>
+<tr><th colspan="2">エディタ (秀丸キー)</th></tr>
+<tr><td>Ctrl+N / Ctrl+O / Ctrl+S / Ctrl+P</td><td>新規 / 開く / 上書き保存 / 印刷</td></tr>
+<tr><td>Ctrl+Z / Ctrl+Y</td><td>やり直し / やり直しのやり直し</td></tr>
+<tr><td>Ctrl+X / Ctrl+C / Ctrl+V / Del</td><td>切り抜き / コピー / 貼り付け / 削除</td></tr>
+<tr><td>Shift+F7 / Shift+F8</td><td>追加切り抜き / 追加コピー</td></tr>
+<tr><td>Ctrl+A</td><td>すべてを選択</td></tr>
+<tr><td>Ctrl+B</td><td>範囲選択の開始/解除</td></tr>
+<tr><td>Shift+カーソル</td><td>範囲選択</td></tr>
+<tr><td>Ctrl+F / Ctrl+R</td><td>検索 / 置換 (正規表現・単語・あいまい・強調)</td></tr>
+<tr><td>F3 / Shift+F3</td><td>下候補 / 上候補</td></tr>
+<tr><td>Ctrl+G</td><td>指定行</td></tr>
+<tr><td>Ctrl+L</td><td>最後に編集した所</td></tr>
+<tr><td>Home / End</td><td>行頭(インデント先頭と切替) / 行末</td></tr>
+<tr><td>Ctrl+Home / Ctrl+End</td><td>ファイルの先頭 / 最後</td></tr>
+<tr><td>Ctrl+← / Ctrl+→</td><td>単語単位の移動</td></tr>
+<tr><td>Ctrl+↑ / Ctrl+↓</td><td>1行スクロール</td></tr>
+<tr><td>PageUp / PageDown</td><td>ページ移動</td></tr>
+<tr><td>Tab / Shift+Tab (複数行選択時)</td><td>インデント / 逆インデント</td></tr>
+<tr><td>Insert</td><td>挿入 / 上書き切替</td></tr>
+<tr><td>Shift+F1 / Shift+F2</td><td>キー操作の記録開始/終了 / 再生</td></tr>
+<tr><td>Alt+矢印 / Alt+Shift+矢印</td><td>罫線を引く (細線 / 太線)。交差や角は自動で ┼ ┌ などになる</td></tr>
+<tr><td>Alt+Ctrl+矢印</td><td>罫線を消す</td></tr>
+<tr><td>Esc</td><td>選択解除・ダイアログを閉じる</td></tr>
+<tr><td>F1</td><td>このキー割り当て</td></tr>
+<tr><td>ダブルクリック / トリプルクリック</td><td>単語選択 / 行選択</td></tr>
+<tr><th colspan="2">Markdown (.md で自動有効 / 表示メニュー)</th></tr>
+<tr><td>編集 → Markdown</td><td>太字・斜体・コード・リンク・見出し・リスト・チェック・表の整形</td></tr>
+<tr><td>表示 → Markdownプレビュー</td><td>右側にプレビュー(連動スクロール)</td></tr>
+<tr><td>検索 → 見出し一覧 / アウトラインバー</td><td>見出しへジャンプ</td></tr>
+<tr><td>ファイル → HTMLとして書き出し</td><td>Markdown を HTML に変換して保存</td></tr>
+</table></div>
+<p class="dim">※ OS側の日本語入力(MS-IME/ATOK)は<b>OFF</b>にして使います(半角/全角キー)。Ctrl+N / Ctrl+T / Ctrl+W はブラウザが横取りします。</p>
+</div></div>
+
+<script src="js/i18n.js"></script>
+<script src="js/i18n_en.js"></script>
+<script src="js/ime.js"></script>
+<script src="js/markdown.js"></script>
+<script src="js/speech.js"></script>
+<script src="js/dictimport.js"></script>
+<script src="js/design.js"></script>
+<script src="js/keisen.js"></script>
+<script src="js/keymap.js"></script>
+<script src="dict/manifest.js"></script>
+<script src="js/editor.js"></script>
+</body>
+</html>
