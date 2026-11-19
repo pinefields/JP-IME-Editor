@@ -242,7 +242,7 @@ const ROMAJI = (() => {
     xya:'ゃ', xyu:'ゅ', xyo:'ょ', lya:'ゃ', lyu:'ゅ', lyo:'ょ', xtu:'っ', xtsu:'っ', ltu:'っ', ltsu:'っ', xwa:'ゎ', lwa:'ゎ', xka:'ヵ', xke:'ヶ', lka:'ヵ', lke:'ヶ',
     xyi:'ぃ', xye:'ぇ', lyi:'ぃ', lye:'ぇ',
     '-':'ー', ',':'、', '.':'。', '/':'・', '[':'「', ']':'」', '~':'〜', '!':'！', '?':'？', '(':'（', ')':'）', ':':'：', ';':'；',
-    '<':'＜', '>':'＞', '"':'”', "'":'’', '&':'＆', '*':'＊', '+':'＋', '=':'＝', '_':'＿', '\\':'＼', '^':'＾', '|':'｜', '`':'｀', '{':'｛', '}':'｝', '#':'＃', '$':'＄',
+    '<':'＜', '>':'＞', '"':'”', "'":'’', '&':'＆', '*':'＊', '+':'＋', '=':'＝', '_':'＿', '\\':'＼', '^':'＾', '|':'｜', '`':'｀', '{':'｛', '}':'｝', '#':'＃', '$':'＄', '@':'＠', '%':'％',
   };
   const keys = Object.keys(t);
   const prefixSet = new Set();
@@ -262,6 +262,7 @@ const ROMAJI = (() => {
             if (v === '、' && opt.touten) v = opt.touten;
             if (v === '。' && opt.kuten) v = opt.kuten;
             if (opt.bracketHan && (v === '「' || v === '」')) v = v === '「' ? '｢' : '｣';
+            if (opt.sym && opt.sym[v] !== undefined) v = opt.sym[v];      // 記号の全角/半角 (動作環境 → かな漢字変換)
           }
           out += v; buf = ''; break;
         }
@@ -641,7 +642,8 @@ class IME {
   _commitText() {
     let t;
     if (this.state === 'convert') t = this.segs.map(s => s.cands[s.idx].s).join('');
-    else { this._flushPending(); t = this._modeText(this.kana); if (this.alpha && this.opts.alphaZen && this.state === 'input') t = JP.toZenkakuAscii(t); }
+    else { this._flushPending(); t = this._modeText(this.kana); if (this.alpha && this.opts.alphaZen && this.state === 'input') t = JP.toZenkakuAscii(t);
+      if (this.alpha && this.kana === '@' && this.opts.atZen) t = '＠'; }                 // @ だけで確定 (略語入力にならなかった) → 記号の設定に従う
     return this._post(t);
   }
   /** 確定文字列の既定幅を適用 (カタカナ→半角など) */
@@ -752,6 +754,13 @@ class IME {
     }
     const r = ROMAJI.feed(this.pending, k, this.opts);
     this.pending = r.pending;
+    // 長音記号: かなの直後は常に「ー」(変換の読みになるため)。それ以外(数字・英字の後や先頭)は設定の文字にする
+    const cho = this.opts.chouon;
+    if (r.out && cho && cho !== 'ー' && r.out.includes('ー')) {
+      let prev = this.kana[this.caret - 1] || '', o = '';
+      for (const c of r.out) { const v = (c === 'ー' && !/[ぁ-ゖァ-ヶー]/.test(prev)) ? cho : c; o += v; prev = c === 'ー' && v !== c ? '' : c; }
+      r.out = o;
+    }
     if (r.out) { this.kana = this.kana.substring(0, this.caret) + r.out + this.kana.substring(this.caret); this.caret += r.out.length; }
     this._updatePredict();
     return R();

@@ -14,6 +14,8 @@ const Settings = {
           // IME 入力既定
           digitsZen: false, spaceZen: true, slashZen: false, predictAuto: true, candPerPage: 9,
           kuten: '。', touten: '、', kataHankaku: false, alphaZen: false, bracketHan: false, startMode: 'hira', imeOnStart: true,
+          symKagi: '「」', symParen: '（）', symChouon: 'ー', symNakaten: '・', symExq: '！？', symTilde: '〜', symColon: '：；',
+          symAt: '@', symHash: '＃', symDollar: '＄', symPercent: '%', symAmp: '＆', symAster: '＊', symPlus: '＋', symEqual: '＝', symLtGt: '＜＞', symBrace: '｛｝', symUnder: '＿', symCaret: '＾', symBar: '｜', symYen: '＼', symDq: '”', symSq: '’', symBq: '｀', keymap: 'hidemaru',
           // ファイル
           newEncoding: 'utf8', newEol: '\r\n', bom: false, dicts: null,
           mdPreview: false, mdAuto: true, design: null, lang: 'ja', keisenHalf: false,
@@ -68,6 +70,9 @@ class Doc {
 }
 const posLt = (a, b) => a.line < b.line || (a.line === b.line && a.col < b.col);
 const posEq = (a, b) => a.line === b.line && a.col === b.col;
+
+/** 記号の全角/半角設定 (追加分): [設定名, ローマ字表での既定の文字] */
+const SYM_MORE = [['symAt', '＠'], ['symHash', '＃'], ['symDollar', '＄'], ['symPercent', '％'], ['symAmp', '＆'], ['symAster', '＊'], ['symPlus', '＋'], ['symEqual', '＝'], ['symLtGt', '＜＞'], ['symBrace', '｛｝'], ['symUnder', '＿'], ['symCaret', '＾'], ['symBar', '｜'], ['symYen', '＼'], ['symDq', '”'], ['symSq', '’'], ['symBq', '｀']];
 
 /* ---------------------------------------------------------------- 文字コード */
 const Enc = {
@@ -139,6 +144,8 @@ const Xform = {
   hanAscii: (s) => s.replace(/[！-～]/g, c => String.fromCharCode(c.charCodeAt(0) - 0xFEE0)).replace(/　/g, ' '),
   zenAscii: (s) => s.replace(/[!-~]/g, c => String.fromCharCode(c.charCodeAt(0) + 0xFEE0)).replace(/ /g, '　'),
   hanKata: (s) => JP.kataToHankaku(s),
+  hanPunct: (s) => s.replace(/[。、「」・”“’‘￥〜]/g, c => ({ '。': '｡', '、': '､', '「': '｢', '」': '｣', '・': '･', '”': '"', '“': '"', '’': "'", '‘': "'", '￥': '\\', '〜': '~' })[c]),
+  zenPunct: (s) => s.replace(/[｡､｢｣･]/g, c => ({ '｡': '。', '､': '、', '｢': '「', '｣': '」', '･': '・' })[c]),
   zenKata: (s) => JP.hankakuToKata(s),
   hira: (s) => JP.kataToHira(JP.hankakuToKata(s)),
   kata: (s) => JP.hiraToKata(JP.hankakuToKata(s)),
@@ -181,7 +188,17 @@ class Editor {
     this.render();
     this.focus();
   }
-  _imeOpts() { const d = Settings.data; return { digitsZen: d.digitsZen, spaceZen: d.spaceZen, slashZen: d.slashZen, predictAuto: d.predictAuto, candPerPage: d.candPerPage, kuten: d.kuten, touten: d.touten, kataHankaku: d.kataHankaku, alphaZen: d.alphaZen, bracketHan: d.bracketHan, startMode: d.startMode }; }
+  _imeOpts() { const d = Settings.data; return { digitsZen: d.digitsZen, spaceZen: d.spaceZen, slashZen: d.slashZen, predictAuto: d.predictAuto, candPerPage: d.candPerPage, kuten: d.kuten, touten: d.touten, kataHankaku: d.kataHankaku, alphaZen: d.alphaZen, bracketHan: false, startMode: d.startMode, sym: this._symMap(), chouon: d.symChouon || 'ー', atZen: d.symAt === '＠' }; }
+  /** 記号の全角/半角設定 → { 既定の文字: 入力する文字 } */
+  _symMap() {
+    const d = Settings.data, m = {};
+    if (d.bracketHan) { d.symKagi = '｢｣'; d.bracketHan = false; }            // 旧設定の引き継ぎ
+    if (d.slashZen) { d.symNakaten = '／'; d.slashZen = false; }
+    const pair = (def, val) => { if (val && val !== def && val.length === def.length) for (let i = 0; i < def.length; i++) m[def[i]] = val[i]; };
+    pair('「」', d.symKagi); pair('（）', d.symParen); pair('・', d.symNakaten); pair('！？', d.symExq); pair('〜', d.symTilde); pair('：；', d.symColon);
+    for (const [f, def] of SYM_MORE) pair(def, d[f]);
+    return m;
+  }
   _hookDoc(doc) { doc.onChange = (from, nOld, nNew, end) => { this.markDirty(from, nOld, nNew); this.lastEditPos = { ...end }; this._shiftMarks(from, nOld, nNew); }; }
   _shiftMarks(from, nOld, nNew) {
     const shift = (set) => { const d = nNew - nOld; if (!d) return; const n = new Set(); for (const l of set) { if (l < from) n.add(l); else if (l >= from + nOld) n.add(l + d); else if (l < from + nNew) n.add(l); } set.clear(); for (const l of n) set.add(l); };
@@ -317,8 +334,86 @@ class Editor {
   colWidth(line, col) { let w = 0; const s = this.doc.lines[line]; for (let i = 0; i < col && i < s.length; i++) w += s[i] === '\t' ? Settings.data.tabWidth - (w % Settings.data.tabWidth) : JP.charWidth(s[i]); return w; }
   colFromWidth(line, width) { const s = this.doc.lines[line]; let w = 0; for (let i = 0; i < s.length; i++) { const cw = s[i] === '\t' ? Settings.data.tabWidth - (w % Settings.data.tabWidth) : JP.charWidth(s[i]); if (w + cw / 2 >= width) return i; w += cw; } return s.length; }
   pushPos() { const last = this.posHistory[this.posHistory.length - 1]; if (!last || !posEq(last, this.cur)) this.posHistory.push({ ...this.cur }); if (this.posHistory.length > 100) this.posHistory.shift(); }
-  jumpTo(pos, select) { this.pushPos(); this.cur = { ...pos }; this.clampCur(); if (!select) this.clearSelection(); this.prefCol = null; }
-  moveVert(dy, e) { this.startSelIfShift(e); if (this.prefCol === null) this.prefCol = this.colWidth(this.cur.line, this.cur.col); this.cur.line = Math.max(0, Math.min(this.doc.lineCount() - 1, this.cur.line + dy)); this.cur.col = this.colFromWidth(this.cur.line, this.prefCol); }
+  jumpTo(pos, select) { this.rowEnd = false; this.pushPos(); this.cur = { ...pos }; this.clampCur(); if (!select) this.clearSelection(); this.prefCol = null; }
+  moveVert(dy, e) {
+    if (Settings.data.wrap) return this.moveRows(dy, e);
+    this.startSelIfShift(e); if (this.prefCol === null) this.prefCol = this.colWidth(this.cur.line, this.cur.col); this.cur.line = Math.max(0, Math.min(this.doc.lineCount() - 1, this.cur.line + dy)); this.cur.col = this.colFromWidth(this.cur.line, this.prefCol); }
+  /* ---- 折り返し表示のときの「表示行」。秀丸と同じく、折り返された部分も 1 行として数え、上下・Home・End も表示行で動く ---- */
+  /** 表示行 1 行ぶんの高さ */
+  rowH() {
+    const tx = this.el.text, key = getComputedStyle(tx).font;
+    if (this._rowHKey !== key) { const m = document.createElement('div'); m.className = 'line'; m.style.cssText = 'position:absolute;visibility:hidden'; m.innerHTML = '<span class="lc">0</span>'; tx.appendChild(m); this._rowHv = m.getBoundingClientRect().height || 20; m.remove(); this._rowHKey = key; }
+    return this._rowHv;
+  }
+  /** 論理行 li の各表示行が始まる桁位置 (折り返しなしなら [0])。画面の実際の折り返し位置を測る */
+  rows(li) {
+    const s = this.doc.lines[li];
+    if (!Settings.data.wrap || !s) return [0];
+    if (!this._rowCache) this._rowCache = new Map();
+    const c = this._rowCache.get(li);
+    if (this.ime.active) return (c && c.text === s) ? c.starts : [0];
+    const el = this.el.text.children[li], lc = el && el.lastChild; if (!lc) return [0];
+    const w = lc.clientWidth;
+    if (c && c.text === s && c.w === w && c.font === this._rowHKey) return c.starts;
+    const h = this.rowH(), starts = [0], tops = [0];
+    if (lc.offsetHeight > h * 1.5) {
+      const range = document.createRange(), walker = document.createTreeWalker(lc, NodeFilter.SHOW_TEXT), base = lc.getBoundingClientRect().top;
+      let col = 0, top = null, t;
+      while ((t = walker.nextNode())) {
+        if (t.parentElement.closest('.pre, .eol, .eof')) continue;
+        const v = t.nodeValue;
+        for (let i = 0; i < v.length; i++, col++) {
+          if (/[\uDC00-\uDFFF]/.test(v[i])) continue;
+          range.setStart(t, i); range.setEnd(t, i + 1);
+          const r = range.getClientRects()[0]; if (!r) continue;
+          if (top !== null && r.top > top + h / 2) { starts.push(col); tops.push(r.top - base); }
+          if (top === null || r.top > top + h / 2) top = r.top;
+        }
+      }
+    }
+    if (this._rowCache.size > 4000) this._rowCache.clear();
+    this._rowCache.set(li, { text: s, w, font: this._rowHKey, starts, tops });
+    return starts;
+  }
+  /** 桁位置 col がある表示行。 atEnd: 折り返し位置ちょうどのとき、前の表示行の行末とみなす */
+  rowOf(starts, col, atEnd) { let r = 0; while (r + 1 < starts.length && starts[r + 1] <= col) r++; if (atEnd && r > 0 && starts[r] === col) r--; return r; }
+  moveRows(dy, e) {
+    this.startSelIfShift(e);
+    const keepEnd = this.rowEndPrev, n = this.doc.lineCount(), sg = dy < 0 ? -1 : 1;
+    let li = this.cur.line, st = this.rows(li), r = this.rowOf(st, this.cur.col, keepEnd);
+    if (this.prefCol === null) this.prefCol = this.colWidth(li, this.cur.col) - this.colWidth(li, st[r]);
+    for (let k = Math.abs(dy); k > 0; k--) {
+      if (sg > 0) { if (r + 1 < st.length) r++; else if (li + 1 < n) { li++; st = this.rows(li); r = 0; } else break; }
+      else { if (r > 0) r--; else if (li > 0) { li--; st = this.rows(li); r = st.length - 1; } else break; }
+    }
+    const last = r === st.length - 1, a = st[r], b = last ? this.doc.lines[li].length : st[r + 1];
+    if (keepEnd && !last) { this.cur = { line: li, col: b }; this.rowEnd = true; return; }
+    this.cur = { line: li, col: Math.max(a, Math.min(this.colFromWidth(li, this.colWidth(li, a) + this.prefCol), last ? b : b - 1)) };
+  }
+  /** Home (dir < 0) / End (dir > 0): 表示行の先頭・末尾へ */
+  rowEdge(dir, e) {
+    this.startSelIfShift(e); this.prefCol = null;
+    const li = this.cur.line, s = this.doc.lines[li], st = this.rows(li), r = this.rowOf(st, this.cur.col, this.rowEndPrev);
+    if (dir < 0) { if (r > 0) this.cur.col = st[r]; else { const ind = s.match(/^[ \t　]*/)[0].length; this.cur.col = (this.cur.col === ind) ? 0 : ind; } }
+    else if (r + 1 < st.length) { this.cur.col = st[r + 1]; this.rowEnd = true; }
+    else this.cur.col = s.length;
+  }
+  /** 行番号を表示行ごとに振り直す (折り返し表示のとき)。 _rowBase[i] = 論理行 i より前にある表示行の数 */
+  updateRowNumbers(again) {
+    const tx = this.el.text, n = this.doc.lineCount(), h = this.rowH(), cnt = new Array(n), base = new Array(n + 1);
+    let total = 0;
+    for (let i = 0; i < n; i++) { base[i] = total; const el = tx.children[i]; cnt[i] = el ? Math.max(1, Math.round(el.lastChild.offsetHeight / h)) : 1; total += cnt[i]; }
+    base[n] = total; this._rowBase = base; this._rowTotal = total;
+    const lnw = String(total).length;
+    if (this._lnw !== lnw) { this._lnw = lnw; document.documentElement.style.setProperty('--lnw', (lnw + 1) + 'ch'); if (!again) return this.updateRowNumbers(true); }
+    if (!Settings.data.lineNumbers) return;
+    for (let i = 0; i < n; i++) {
+      const el = tx.children[i]; if (!el) continue;
+      let want = String(base[i] + 1).padStart(lnw, ' ');
+      for (let k = 1; k < cnt[i]; k++) want += '\n' + String(base[i] + 1 + k).padStart(lnw, ' ');
+      if (el._ln !== want) { el.firstChild.textContent = want; el._ln = want; }
+    }
+  }
   moveHoriz(dx, e) {
     this.startSelIfShift(e); this.prefCol = null;
     const sel = !e.shiftKey && !this.selMode && this.selection();
@@ -335,7 +430,14 @@ class Editor {
     else { if (this.cur.col === 0) { if (this.cur.line > 0) { this.cur.line--; this.cur.col = this.doc.lines[this.cur.line].length; } return; } let i = this.cur.col; while (i > 0 && /\s/.test(s[i - 1])) i--; const k = this.wordClass(s[i - 1]); while (i > 0 && this.wordClass(s[i - 1]) === k) i--; this.cur.col = i; }
   }
   selectWordAt(line, col) { const s = this.doc.lines[line]; if (!s.length) return; col = Math.min(col, s.length - 1); const k = this.wordClass(s[col]); let a = col, b = col + 1; while (a > 0 && this.wordClass(s[a - 1]) === k) a--; while (b < s.length && this.wordClass(s[b]) === k) b++; this.anchor = { line, col: a }; this.cur = { line, col: b }; }
-  gotoLine(n) { this.jumpTo({ line: n - 1, col: 0 }); this.render(); }
+  gotoLine(n) {
+    if (Settings.data.wrap && this._rowBase) {          // 折り返し表示中は、画面の行番号(表示行)で指定する
+      const b = this._rowBase, row = Math.max(0, Math.min(n - 1, b[b.length - 1] - 1)); let li = 0;
+      while (li + 1 < b.length - 1 && b[li + 1] <= row) li++;
+      const st = this.rows(li); this.jumpTo({ line: li, col: st[Math.min(row - b[li], st.length - 1)] || 0 }); this.render(); return;
+    }
+    this.jumpTo({ line: n - 1, col: 0 }); this.render();
+  }
 
   /* ---- 検索 ---- */
   _fuzzyNorm(s) { let o = ''; for (const c of s) { let n = c.normalize('NFKC'); if (n.length !== 1) n = c; n = JP.kataToHira(n).toLowerCase(); o += n; } return o; }
@@ -486,6 +588,11 @@ class Editor {
     tx.addEventListener('mousedown', (e) => {
       if (e.button !== 0) return;
       const p = this.posFromPoint(e.clientX, e.clientY); if (!p) return;
+      this.rowEnd = false;
+      if (Settings.data.wrap) {                          // 折り返し位置ちょうど: 上の表示行の右端をクリックしたのなら、その行末に置く
+        const st = this.rows(p.line), k = st.indexOf(p.col), c = this._rowCache && this._rowCache.get(p.line), lcEl = this.el.text.children[p.line];
+        if (k > 0 && c && lcEl) this.rowEnd = e.clientY - lcEl.lastChild.getBoundingClientRect().top < c.tops[k];
+      }
       this.commitIme();
       clicks++; clearTimeout(clickTimer); clickTimer = setTimeout(() => clicks = 0, 400);
       if (clicks === 2) this.selectWordAt(p.line, p.col);
@@ -498,7 +605,7 @@ class Editor {
     this.el.editor.addEventListener('scroll', () => { this.syncRuler(); this.positionPopups(); this.syncPreviewScroll(); });
     this.el.outline.addEventListener('click', () => { if (this.isMd()) UI.openHeadings(); });
     this.el.cand.addEventListener('mousedown', (e) => { const li = e.target.closest('li'); if (li) { this.ime.selectCandidate(+li.dataset.i); this.render(); } e.preventDefault(); });
-    window.addEventListener('resize', () => { this.syncRuler(); this.positionPopups(); });
+    window.addEventListener('resize', () => { if (Settings.data.wrap) this.render(); this.syncRuler(); this.positionPopups(); });
     document.addEventListener('mousedown', (e) => { if (!e.target.closest('.dialog, #menubar, #cand, #pred, button, input, select, textarea')) setTimeout(() => this.focus(), 0); });
   }
   posFromPoint(x, y) {
@@ -542,6 +649,9 @@ class Editor {
     if (this.macro.recording && !this.macro.playing && !(shift && key === 'F1')) this.macro.keys.push({ key, ctrl, shift, alt });
     // ---- 音声入力 ON/OFF (Ctrl+Alt+M) / 選択範囲の再変換 (変換キー, Ctrl+Alt+R)
     if (ctrl && alt && key.toLowerCase() === 'm') { e.preventDefault(); this.cmd('speech'); return; }
+    if (!/^(Shift|Control|Alt|Meta)$/.test(key)) { this.rowEndPrev = this.rowEnd; this.rowEnd = false; }
+    // ---- キー配列 (Emacs / vi / nano / VZ / VS Code / Atom)。割り当てのないキーは下の標準処理へ
+    if (Keymap.handle(this, e)) { e.preventDefault(); return; }
     // ---- 罫線: Alt+矢印 = 細線、Alt+Shift+矢印 = 太線、Alt+Ctrl+矢印 = 消去
     if (alt && /^Arrow(Up|Down|Left|Right)$/.test(key)) { e.preventDefault(); this.commitIme(); Keisen.step(this, key.slice(5).toLowerCase(), ctrl ? 0 : shift ? 2 : 1); this.render(); return; }
     if (!this.ime.active && this.selection() && (key === 'Convert' || (ctrl && alt && key.toLowerCase() === 'r'))) { e.preventDefault(); this.reconvert(); return; }
@@ -591,8 +701,8 @@ class Editor {
         case 'ArrowDown': this.moveVert(1, e); break;
         case 'PageUp': this.moveVert(-this.pageLines(), e); break;
         case 'PageDown': this.moveVert(this.pageLines(), e); break;
-        case 'Home': this.startSelIfShift(e); this.prefCol = null; { const ind = this.doc.lines[this.cur.line].match(/^[ \t　]*/)[0].length; this.cur.col = (this.cur.col === ind) ? 0 : ind; } break;
-        case 'End': this.startSelIfShift(e); this.prefCol = null; this.cur.col = this.doc.lines[this.cur.line].length; break;
+        case 'Home': this.rowEdge(-1, e); break;
+        case 'End': this.rowEdge(1, e); break;
         case 'Enter': { let ins = '\n'; if (Settings.data.autoIndent) ins += this.doc.lines[this.cur.line].substring(0, this.cur.col).match(/^[ \t　]*/)[0]; this.insertText(ins); break; }
         case 'Tab': { if (shift) { this.unindent(); break; } const sel = this.selection(); if (sel && sel.a.line !== sel.b.line) { this.indent(); break; } this.insertText(Settings.data.tabSpaces ? ' '.repeat(Settings.data.tabWidth - (this.colWidth(this.cur.line, this.cur.col) % Settings.data.tabWidth)) : '\t', true); break; }
         case 'Backspace': if (!this.deleteSelection()) { if (this.cur.col > 0) { const a = { line: this.cur.line, col: this.cur.col - (/[\uDC00-\uDFFF]/.test(this.doc.lines[this.cur.line][this.cur.col - 1]) ? 2 : 1) }; this.doc.replaceRange(a, this.cur, ''); this.cur = a; } else if (this.cur.line > 0) { const a = { line: this.cur.line - 1, col: this.doc.lines[this.cur.line - 1].length }; this.doc.replaceRange(a, this.cur, ''); this.cur = a; } } this.prefCol = null; break;
@@ -604,13 +714,14 @@ class Editor {
         case 'F3': this.findNext(shift ? -1 : 1); break;
         case 'F7': if (shift) this.copySel(true, true); break;
         case 'F8': if (shift) this.copySel(false, true); break;
-        case 'F5': case 'F6': case 'F9': case 'F10': case 'F11': case 'F12': if (!shift) break; handled = false; break;
+        case 'F11': if (!shift) { this.cmd('fullscreen'); break; } handled = false; break;
+        case 'F5': case 'F6': case 'F9': case 'F10': case 'F12': if (!shift) break; handled = false; break;
         default: if (key.length === 1 && !ctrl) this.insertText(key, true); else handled = false;
       }
     } else handled = false;
     if (handled) { e.preventDefault(); this.clampCur(); this.render(); }
   }
-  lineHeight() { const l = this.el.text.querySelector('.line'); return l ? l.getBoundingClientRect().height : 20; }
+  lineHeight() { return this.rowH(); }
   pageLines() { return Math.max(1, Math.floor(this.el.editor.clientHeight / this.lineHeight()) - 1); }
 
   /* ---- メニューコマンド ---- */
@@ -643,7 +754,7 @@ class Editor {
       // 変換
       case 'upper': this.transform(t => t.toUpperCase(), false); break;
       case 'lower': this.transform(t => t.toLowerCase(), false); break;
-      case 'hankaku': this.transform(t => Xform.hanKata(Xform.hanAscii(t)), false); break;
+      case 'hankaku': this.transform(t => Xform.hanKata(Xform.hanPunct(Xform.hanAscii(t))), false); break;
       case 'hira': this.transform(Xform.hira, false); break;
       case 'kata': this.transform(Xform.kata, false); break;
       case 'tab2sp': this.transformLines(t => Xform.tabToSpace(t, tw)); break;
@@ -701,6 +812,11 @@ class Editor {
       // その他
       case 'settings': UI.openSettings('env', arg); return;
       case 'filetype': UI.openSettings('ft', arg); return;
+      case 'keisenToggle': this.keisenMode = !this.keisenMode; this.flash(this.keisenMode ? '罫線モード: 矢印で細線、Shift+矢印で太線、Ctrl+矢印で消去、Esc で終了' : '罫線モードを終了しました', 5000); this.render(); return;
+      case 'fullscreen':
+        if (document.fullscreenElement) { document.exitFullscreen(); return; }
+        document.documentElement.requestFullscreen().then(() => { if (navigator.keyboard && navigator.keyboard.lock) navigator.keyboard.lock().catch(() => {}); this.flash('全画面表示: F11 で戻ります', 4000); this.focus(); }).catch(() => this.flash('全画面表示にできませんでした'));
+        return;
       case 'keisenHelp': this.flash('罫線: Alt+矢印で細線、Alt+Shift+矢印で太線、Alt+Ctrl+矢印で消去'); return;
       case 'keisenMode': Settings.data.keisenHalf = !!arg; Settings.save(); this.flash(arg ? '半角罫線 (+-|) で描きます' : '全角罫線で描きます'); return;
       case 'keisenRow': if (!Keisen.insertRow(this)) this.flash('表の行(縦の罫線がある行)にカーソルを置いてください'); this.render(); return;
@@ -712,7 +828,7 @@ class Editor {
       case 'dicts': UI.openDicts(); return;
       case 'learnClear': if (confirm('学習データを消去しますか?')) { this.ime.learner.clear(); this.flash('学習データを消去しました'); } break;
       case 'imetoggle': this.commitIme(); this.ime.on = !this.ime.on; break;
-      case 'about': UI.open('#dlgAbout'); return;
+      case 'about': UI.open('#dlgAbout'); $('#aboutOk').focus(); return;
       // Markdown
       case 'mdMode': this.mdManual = arg === 'auto' ? null : arg === 'on'; this.rendered = []; this.applySettings(); break;
       case 'mdPreview': d.mdPreview = !d.mdPreview; Settings.save(); this.applySettings(); break;
@@ -754,15 +870,24 @@ class Editor {
     for (const m of mds) { bounds.add(m[0]); bounds.add(m[1]); }
     const caretPos = cur ? this.cur.col : -1;
     if (caretPos >= 0) bounds.add(caretPos);
+    // 折り返し位置ちょうどにカーソルがあるとき、前の表示行の行末(End の後)か次の表示行の先頭かを、隣の文字と離れないようにして決める
+    let glue = null;
+    if (cur && Settings.data.wrap && caretPos > 0 && caretPos < text.length && !(preedit && preedit.parts.length)) {
+      glue = this.rowEnd ? [caretPos - (/[\uDC00-\uDFFF]/.test(text[caretPos - 1]) && caretPos > 1 ? 2 : 1), caretPos] : [caretPos, caretPos + (/[\uD800-\uDBFF]/.test(text[caretPos]) ? 2 : 1)];
+      bounds.add(glue[0]); bounds.add(Math.min(glue[1], text.length));
+    }
     const pts = [...bounds].sort((x, y) => x - y);
     for (let k = 0; k < pts.length - 1; k++) {
       const a = pts[k], b = pts[k + 1];
-      if (a === caretPos) out += this._caretHtml(preedit);
+      const g = glue && a === glue[0];
+      if (g) out += '<span class="nb">';
+      if (a === caretPos && !(glue && glue.done)) out += this._caretHtml(preedit);
       const cls = [];
       if (selR && a >= selR[0] && b <= selR[1]) cls.push('sel');
       if (hls.some(h => a >= h[0] && b <= h[1])) cls.push('hl');
       for (const m of mds) if (a >= m[0] && b <= m[1]) cls.push(m[2]);
       push(text.substring(a, b), cls.join(' '));
+      if (g) { if (b === caretPos) { out += this._caretHtml(preedit); glue.done = true; } out += '</span>'; }
     }
     if (caretPos === text.length) out += this._caretHtml(preedit);
     if (marks) out += (i === this.doc.lineCount() - 1) ? '<span class="eof">[EOF]</span>' : '<span class="eol">↓</span>';
@@ -784,7 +909,8 @@ class Editor {
   render() {
     const doc = this.doc, n = doc.lineCount(), sel = this.selection();
     const preedit = this.ime.active ? this.ime.display() : (typeof Speech !== 'undefined' && Speech.interim ? { parts: [{ text: Speech.interim, kind: 'speech' }], caret: -1, text: Speech.interim } : null);
-    const tx = this.el.text, showLn = Settings.data.lineNumbers, lnw = String(n).length;
+    const wrapNum = !!Settings.data.wrap; if (this._wrapNum !== wrapNum) { this._wrapNum = wrapNum; this.rendered = []; this._lnw = null; }
+    const tx = this.el.text, showLn = Settings.data.lineNumbers, lnw = wrapNum ? String(Math.max(n, this._rowTotal || 0)).length : String(n).length;
     const hlRe = this.find.hl ? this.buildRegex() : null;
     const md = this.isMd();
     if (md) { const fm = MD.fenceMap(doc.lines); if (!this._fence || this._fence.length !== fm.length || fm.some((v, k) => v !== this._fence[k])) { this._fence = fm; this.rendered = []; } }
@@ -792,7 +918,7 @@ class Editor {
     if (this._wasMd !== md) { this._wasMd = md; this.rendered = []; this.el.preview.style.display = (Settings.data.mdPreview && md) ? '' : 'none'; }
     if (this._lnw !== lnw) { this._lnw = lnw; document.documentElement.style.setProperty('--lnw', (lnw + 1) + 'ch'); this._lnwChanged = true; }
     const lineHtml = (i) => { const inSel = sel && i >= sel.a.line && i <= sel.b.line; return this.renderLineHtml(i, doc.lines[i], inSel ? sel : null, preedit, hlRe); };
-    const lnText = (i) => (showLn ? String(i + 1).padStart(lnw, ' ') : '');
+    const lnText = (i) => (showLn && !wrapNum ? String(i + 1).padStart(lnw, ' ') : '');
     if (this.rendered.length === 0 || tx.children.length !== n) {
       const parts = new Array(n);
       for (let i = 0; i < n; i++) { const html = lineHtml(i); this.rendered[i] = html; parts[i] = `<div class="line${i === this.cur.line ? ' cur' : ''}${this.bookmarks.has(i) ? ' bm' : ''}" data-line="${i}"><span class="ln">${lnText(i)}</span><span class="lc">${html}</span></div>`; }
@@ -807,12 +933,13 @@ class Editor {
         if (this.rendered[i] !== html) { this.rendered[i] = html; el.lastChild.innerHTML = html; }
         el.classList.toggle('cur', i === this.cur.line); el.classList.toggle('bm', this.bookmarks.has(i));
       }
-      if (this.lnFrom < n || this._lnwChanged) { const f = this._lnwChanged ? 0 : this.lnFrom; for (let i = f; i < n; i++) { const el = tx.children[i]; el.dataset.line = i; el.firstChild.textContent = lnText(i); el.classList.toggle('bm', this.bookmarks.has(i)); } this.lnFrom = Infinity; this._lnwChanged = false; }
+      if (this.lnFrom < n || this._lnwChanged) { const f = this._lnwChanged ? 0 : this.lnFrom; for (let i = f; i < n; i++) { const el = tx.children[i]; el.dataset.line = i; if (!wrapNum) el.firstChild.textContent = lnText(i); el.classList.toggle('bm', this.bookmarks.has(i)); } this.lnFrom = Infinity; this._lnwChanged = false; }
       if (tx.children[this.prevCur.line]) tx.children[this.prevCur.line].classList.toggle('cur', this.prevCur.line === this.cur.line);
       if (tx.children[this.cur.line]) tx.children[this.cur.line].classList.add('cur');
     }
     this.dirtyFrom = Infinity; this.dirtyLines.clear();
     this.prevCur = { ...this.cur }; this.prevSel = sel ? { a: { ...sel.a }, b: { ...sel.b } } : null;
+    if (wrapNum) this.updateRowNumbers();
     this.scrollToCursor(); this.syncRuler(); this.renderStatus(); this.renderPopups(); this.renderOutline(); this.schedulePreview();
   }
   /** ルーラー(目盛り)を描く。秀丸と同じく桁の境界に目盛り線を引き、10 桁ごとに数字を添える。
@@ -871,10 +998,13 @@ class Editor {
     if (!Settings.data.wrap) { if (r.left < er.left + 60) ed.scrollLeft -= (er.left + 60 - r.left); else if (r.right > er.right - 20) ed.scrollLeft += (r.right - er.right) + 40; }
   }
   renderStatus() {
+    Keymap.status(this);
     const d = this.doc, col = this.colWidth(this.cur.line, this.cur.col) + 1;
     const chars = d.lines.reduce((a, l) => a + l.length, 0) + d.lineCount() - 1, sel = this.selection();
-    $('#mb-pos').textContent = `${this.cur.line + 1}: ${col}`;
-    $('#st-pos').textContent = `${this.cur.line + 1} 行 ${col} 桁`;
+    let ln = this.cur.line + 1, cl = col;
+    if (Settings.data.wrap && this._rowBase && this._rowBase.length === d.lineCount() + 1) { const st = this.rows(this.cur.line), r = this.rowOf(st, this.cur.col, this.rowEnd); ln = this._rowBase[this.cur.line] + r + 1; cl = col - this.colWidth(this.cur.line, st[r]); }
+    $('#mb-pos').textContent = `${ln}: ${cl}`;
+    $('#st-pos').textContent = `${ln} 行 ${cl} 桁`;
     $('#st-info').textContent = `${d.lineCount()} 行 / ${chars} 文字` + (sel ? ` / 選択 ${this.selectedText().length} 文字` : '') + (this.selMode ? ' [範囲選択]' : '') + (this.macro.recording ? ' ●記録中' : '');
     $('#st-mode').textContent = (this.overwrite ? '上書' : '挿入') + (this.isMd() ? ' / Markdown' : '');
     $('#st-eol').textContent = d.eol === '\r\n' ? 'CR+LF' : d.eol === '\r' ? 'CR' : 'LF';
@@ -948,6 +1078,7 @@ const Menu = {
       { label: '表示(V)', items: [
         { label: '折り返し(W)', check: d.wrap, cmd: 'wrap' }, { label: 'ルーラー(R)', check: d.ruler, cmd: 'ruler' }, { label: '行番号(N)', check: d.lineNumbers, cmd: 'lineNumbers' },
         { label: '全角空白/タブ/改行の表示(M)', check: d.showMarks, cmd: 'marks' }, { label: 'カーソル行の強調(C)', check: d.curLine, cmd: 'curLine' }, { label: 'ステータスバー(S)', check: d.statusBar, cmd: 'statusBar' }, { sep: true },
+        { label: '全画面表示(F)', key: 'F11', check: !!document.fullscreenElement, cmd: 'fullscreen' },
         { label: '配色(T)', sub: [ { label: '標準(白)', check: d.theme === 'light', cmd: 'theme', arg: 'light' }, { label: '黒', check: d.theme === 'dark', cmd: 'theme', arg: 'dark' } ] },
         { label: '文字を大きく(+)', cmd: 'fontUp' }, { label: '文字を小さく(-)', cmd: 'fontDown' }, { sep: true },
         { label: 'Markdownモード(K)', sub: [ { label: '自動 (.md ファイルで有効)', check: ed.mdManual === null, cmd: 'mdMode', arg: 'auto' }, { label: '常に有効', check: ed.mdManual === true, cmd: 'mdMode', arg: 'on' }, { label: '無効', check: ed.mdManual === false, cmd: 'mdMode', arg: 'off' } ] },
@@ -964,6 +1095,7 @@ const Menu = {
         { label: 'キー操作の記録開始/終了(R)', key: 'Shift+F1', cmd: 'macroRec', check: ed.macro.recording }, { label: 'キー操作の再生(P)', key: 'Shift+F2', cmd: 'macroPlay', disabled: !ed.macro.keys.length },
         { label: 'キー操作の保存(S)...', cmd: 'macroSave', disabled: !ed.macro.keys.length }, { label: 'キー操作の読込み(L)...', cmd: 'macroLoad' }, { sep: true },
         { label: '罫線(K)', sub: [
+          { label: '罫線モード (矢印キーだけで描く)(M)', check: !!ed.keisenMode, cmd: 'keisenToggle' }, { sep: true },
           { label: '細線を引く', key: 'Alt+矢印', cmd: 'keisenHelp' }, { label: '太線を引く', key: 'Alt+Shift+矢印', cmd: 'keisenHelp' }, { label: '罫線を消す', key: 'Alt+Ctrl+矢印', cmd: 'keisenHelp' }, { sep: true },
           { label: '全角罫線  ─│┌┐(Z)', check: !d.keisenHalf, cmd: 'keisenMode', arg: false }, { label: '半角罫線  +-|(H)', check: !!d.keisenHalf, cmd: 'keisenMode', arg: true }, { sep: true },
           { label: '表に行を挿入(I)', cmd: 'keisenRow' } ] } ] },
@@ -990,7 +1122,7 @@ const Menu = {
       if (this.openIdx >= 0) { altAlone = e.key === 'Alt' && !e.repeat && !e.ctrlKey && !e.shiftKey; this.onKey(e); return; }
       if (e.key === 'Alt') { altAlone = !e.repeat && !e.ctrlKey && !e.shiftKey; e.preventDefault(); return; }
       altAlone = false;
-      if (e.altKey && !e.ctrlKey && !e.metaKey && !this.dialogOpen()) {
+      if (e.altKey && !e.ctrlKey && !e.metaKey && !this.dialogOpen() && !Keymap.claims(e)) {
         const i = this.mn.indexOf(this.keyChar(e));
         if (i >= 0) { e.preventDefault(); e.stopPropagation(); this.openKb(i); }
       }
@@ -1097,14 +1229,18 @@ const UI = {
     $('#sortOk').onclick = () => { const desc = $('#sortDesc').checked, num = $('#sortNum').checked, uniq = $('#sortUniq').checked, icase = $('#sortIcase').checked; ed.transformLines(t => { let a = t.split('\n'); const key = (s) => num ? parseFloat(s.replace(/[^\d.\-]/g, '')) || 0 : (icase ? s.toLowerCase() : s); a.sort((x, y) => { const kx = key(x), ky = key(y); return kx < ky ? -1 : kx > ky ? 1 : 0; }); if (desc) a.reverse(); if (uniq) a = a.filter((l, i) => i === 0 || l !== a[i - 1]); return a.join('\n'); }); this.closeDialogs(); ed.render(); ed.focus(); };
     $('#caseOk').onclick = () => { const v = document.querySelector('input[name=caseMode]:checked').value; ed.transform(t => v === 'upper' ? t.toUpperCase() : v === 'lower' ? t.toLowerCase() : t.replace(/\b([a-z])/g, c => c.toUpperCase()), false); this.closeDialogs(); ed.render(); ed.focus(); };
     $('#widthOk').onclick = () => { const toHan = document.querySelector('input[name=widthDir]:checked').value === 'han'; const o = { alpha: $('#wAlpha').checked, sym: $('#wSym').checked, sp: $('#wSpace').checked, kana: $('#wKana').checked };
-      ed.transform(t => { let s = t; if (toHan) { if (o.alpha) s = s.replace(/[Ａ-Ｚａ-ｚ０-９]/g, c => String.fromCharCode(c.charCodeAt(0) - 0xFEE0)); if (o.sym) s = s.replace(/[！-／：-＠［-｀｛-～]/g, c => String.fromCharCode(c.charCodeAt(0) - 0xFEE0)); if (o.sp) s = s.replace(/　/g, ' '); if (o.kana) s = Xform.hanKata(s); }
-        else { if (o.alpha) s = s.replace(/[A-Za-z0-9]/g, c => String.fromCharCode(c.charCodeAt(0) + 0xFEE0)); if (o.sym) s = s.replace(/[!-\/:-@\[-`{-~]/g, c => String.fromCharCode(c.charCodeAt(0) + 0xFEE0)); if (o.sp) s = s.replace(/ /g, '　'); if (o.kana) s = Xform.zenKata(s); } return s; }, false); this.closeDialogs(); ed.render(); ed.focus(); };
+      ed.transform(t => { let s = t; if (toHan) { if (o.alpha) s = s.replace(/[Ａ-Ｚａ-ｚ０-９]/g, c => String.fromCharCode(c.charCodeAt(0) - 0xFEE0)); if (o.sym) s = Xform.hanPunct(s.replace(/[！-／：-＠［-｀｛-～]/g, c => String.fromCharCode(c.charCodeAt(0) - 0xFEE0))); if (o.sp) s = s.replace(/　/g, ' '); if (o.kana) s = Xform.hanKata(s); }
+        else { if (o.alpha) s = s.replace(/[A-Za-z0-9]/g, c => String.fromCharCode(c.charCodeAt(0) + 0xFEE0)); if (o.sym) s = Xform.zenPunct(s.replace(/[!-\/:-@\[-`{-~]/g, c => String.fromCharCode(c.charCodeAt(0) + 0xFEE0))); if (o.sp) s = s.replace(/ /g, '　'); if (o.kana) s = Xform.zenKata(s); } return s; }, false); this.closeDialogs(); ed.render(); ed.focus(); };
     // 設定
     // 設定ダイアログ: コントロールは開いたときに現在値を読み込み、[OK] で初めて反映・保存する(キャンセル/✕/Esc は変更なし)
     this.setBinds = [];
     const bindSet = (sel, key, conv, isCheck) => { const el = $(sel); if (el) this.setBinds.push({ el, key, conv, isCheck }); };
     bindSet('#set-fontSize', 'fontSize', v => +v); bindSet('#set-tabWidth', 'tabWidth', v => +v);
-    for (const id of ['tabSpaces', 'autoIndent', 'digitsZen', 'spaceZen', 'slashZen', 'predictAuto', 'kataHankaku', 'alphaZen', 'bracketHan', 'imeOnStart', 'bom', 'mdAuto', 'mdPreview']) bindSet('#set-' + id, id, null, true);
+    for (const id of ['symKagi', 'symParen', 'symChouon', 'symNakaten', 'symExq', 'symTilde', 'symColon', ...SYM_MORE.map(x => x[0])]) bindSet('#set-' + id, id);
+    bindSet('#set-keymap', 'keymap');
+    // 記号を一括で全角/半角にする (OK を押すまでは確定しない)
+    for (const [btn, han] of [['#symAllZen', false], ['#symAllHan', true]]) $(btn).addEventListener('click', () => document.querySelectorAll('.symgrid select').forEach(sl => { sl.selectedIndex = han ? +(sl.dataset.han || 1) : 0; sl.dispatchEvent(new Event('change', { bubbles: true })); }));
+    for (const id of ['tabSpaces', 'autoIndent', 'digitsZen', 'spaceZen', 'predictAuto', 'kataHankaku', 'alphaZen', 'imeOnStart', 'bom', 'mdAuto', 'mdPreview']) bindSet('#set-' + id, id, null, true);
     bindSet('#set-kuten', 'kuten'); bindSet('#set-touten', 'touten'); bindSet('#set-startMode', 'startMode'); bindSet('#set-newEncoding', 'newEncoding'); bindSet('#set-newEol', 'newEol'); bindSet('#set-candPerPage', 'candPerPage', v => +v);
     bindSet('#set-speechMode', 'speechMode'); for (const id of ['speechContinuous', 'speechCommands', 'speechKuten']) bindSet('#set-' + id, id, null, true);
     Design.init();
@@ -1137,7 +1273,21 @@ const UI = {
   },
   openGoto() { this.open('#dlgGoto'); $('#gotoText').value = this.ed.cur.line + 1; $('#gotoText').focus(); $('#gotoText').select(); },
   openWordReg() { const ed = this.ed; ed.commitIme(); this.open('#dlgWordReg'); $('#wrWord').value = ed.selectedText().replace(/\n/g, '') || ''; $('#wrYomi').value = ''; $('#wrCm').value = ''; ($('#wrWord').value ? $('#wrYomi') : $('#wrWord')).focus(); },
-  openHelp() { this.open('#dlgHelp'); },
+  openHelp() {
+    const km = Keymap.helpHtml(), tabs = [...document.querySelectorAll('#helpTabs button')], pane = $('#helpPane');
+    $('#kmHelp').innerHTML = km; tabs[0].style.display = km ? '' : 'none';
+    const id = Settings.data.keymap || 'hidemaru'; tabs[0].textContent = (Keymap.LIST.find(x => x[0] === id) || ['', ''])[1];
+    const show = (t) => { tabs.forEach(b => b.classList.toggle('on', b.dataset.tab === t)); document.querySelectorAll('#helpPane .hpane').forEach(p => p.classList.toggle('on', p.dataset.tab === t)); pane.scrollTop = 0; };
+    const vis = () => tabs.filter(b => b.style.display !== 'none');
+    tabs.forEach(b => b.onclick = () => { show(b.dataset.tab); $('#helpOk').focus(); });
+    $('#dlgHelp').onkeydown = (e) => {
+      const v = vis(), i = v.findIndex(b => b.classList.contains('on')), step = { ArrowDown: 40, ArrowUp: -40, PageDown: pane.clientHeight - 30, PageUp: -(pane.clientHeight - 30) }[e.key];
+      if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') { show(v[(i + (e.key === 'ArrowRight' ? 1 : v.length - 1)) % v.length].dataset.tab); e.preventDefault(); }
+      else if (step) { pane.scrollTop += step; e.preventDefault(); }
+      else if (e.key === 'Home') { pane.scrollTop = 0; e.preventDefault(); } else if (e.key === 'End') { pane.scrollTop = pane.scrollHeight; e.preventDefault(); }
+    };
+    this.open('#dlgHelp'); show(km ? 'km' : 'ime'); $('#helpOk').focus();
+  },
   openSort() { this.open('#dlgSort'); },
   openCase() { this.open('#dlgCase'); },
   openWidth() { this.open('#dlgWidth'); },
@@ -1165,6 +1315,7 @@ const UI = {
   },
   setPage(p) { if (this.setPageLast && this.setGroup) this.setPageLast[this.setGroup] = p; this.setPageCur = p; document.querySelectorAll('#setTree div').forEach(t => t.classList.toggle('on', t.dataset.page === p)); document.querySelectorAll('.setpage').forEach(t => t.classList.toggle('on', t.dataset.page === p)); if (p === 'design') { Design.renderList(); Design.renderProps(); } },
   loadSettingsControls() {
+    this.ed._symMap();
     for (const b of this.setBinds) { if (b.isCheck) b.el.checked = !!Settings.data[b.key]; else b.el.value = Settings.data[b.key]; }
     const d = Settings.data, tw = [2, 4, 8].includes(+d.tabWidth) ? String(d.tabWidth) : 'c';
     document.querySelector(`input[name=tabw][value="${tw}"]`).checked = true;

@@ -39,7 +39,7 @@ html.theme-dark #ruler { background: #333; color: #ddd; }
 #text { font-family: "MS Gothic", "ＭＳ ゴシック", "BIZ UDGothic", Consolas, monospace; font-size: var(--fs); line-height: 1.45; color: var(--fg); min-height: 100%; min-width: max-content; padding-bottom: 50vh; tab-size: var(--tab); -moz-tab-size: var(--tab); }
 #text.wrap { min-width: 0; }
 .line { display: flex; white-space: pre; }
-#text.wrap .line .lc { white-space: pre-wrap; word-break: break-all; }
+#text.wrap .line .lc { white-space: pre-wrap; word-break: break-all; } .nb { white-space: pre; }
 .line .ln { flex: none; width: var(--lnw, 5ch); text-align: right; padding-right: .4em; color: var(--gfg); background: var(--gutter); user-select: none; border-right: 1px solid var(--uib); margin-right: .6em; }
 .line.bm .ln { background: #ffd34d; color: #000; }
 #text.noln .line .ln { width: 0; padding: 0; margin-right: .4em; border: none; }
@@ -103,6 +103,9 @@ html.theme-dark #ruler { background: #333; color: #ddd; }
 #setTree { border: 1px solid #999; background: #fff; height: 420px; overflow-y: auto; padding: 3px 0; user-select: none; }
 #setTree div { padding: 2px 8px; cursor: default; white-space: nowrap; } #setTree div.sub { padding-left: 26px; } #setTree div.on { background: #0a4e9a; color: #fff; } #setTree div.hide { display: none; }
 #setPages { min-height: 440px; } .setpage { display: none; padding-top: 18px; } .setpage.on { display: block; }
+.symgrid { display: grid; grid-template-columns: max-content max-content max-content max-content; gap: 5px 10px; align-items: center; margin: 4px 0; } .symgrid select { min-width: 11em; margin-right: 18px; } .symgrid.sym2 { grid-template-columns: repeat(5, max-content); gap: 4px 6px; } .symgrid.sym2 select { min-width: 7.6em; margin-right: 0; }
+#kmline { display: none; position: fixed; z-index: 50; height: 26px; align-items: center; background: var(--bg); color: var(--fg); border-top: 1px solid #8884; font-family: var(--font, monospace); padding: 0 6px; box-sizing: border-box; } #kmline input { flex: 1; border: 0; outline: 0; background: transparent; color: inherit; font: inherit; }
+#editor.blockcaret .caret { width: .6em; margin-right: -.6em; opacity: .45; animation: none; } #st-keymap { font-weight: bold; }
 .setpage fieldset { border: 1px solid #bbb; padding: 6px 12px 10px; margin: 0 0 10px; }
 .setpage[data-page=design] fieldset > div { margin: 6px 0; }
 .dialog button.colorbtn { display: block; width: 110px; height: 26px; margin: 3px 0 0; padding: 0; border: 1px solid #555; box-shadow: inset 0 0 0 3px #f0f0f0; cursor: pointer; font-size: 11px; }
@@ -118,6 +121,8 @@ html.theme-dark #ruler { background: #333; color: #ddd; }
 .colnums { display: grid; grid-template-columns: 1fr 1fr; gap: 3px 10px; flex: 1; } .dialog .colnums label { margin: 0; display: flex; justify-content: flex-end; align-items: center; gap: 4px; white-space: nowrap; font-size: 12px; } .colnums input { width: 4.2em; box-sizing: border-box; }
 .dictrow { display: block; padding: 2px 0; } .dictnote { margin-left: 1.6em; font-size: 90%; } .dialog button.dictdel { min-width: 0; padding: 0 8px; font-size: 90%; } #dictImportStatus .err { color: #c62828; }
 .cliprow { padding: 3px 6px; border-bottom: 1px solid #ddd; cursor: pointer; white-space: pre; overflow: hidden; text-overflow: ellipsis; font-family: "MS Gothic", monospace; } .cliprow:hover { background: #cde3f8; }
+#dlgHelp { width: min(680px, 92vw); min-width: 0; } #helpTabs { display: flex; gap: 2px; border-bottom: 1px solid #999; margin: 4px 0 0; } #helpTabs button { min-width: 0; height: 26px; padding: 0 12px; border: 1px solid #999; border-bottom: none; border-radius: 4px 4px 0 0; background: #ddd; margin: 0; } #helpTabs button.on { background: #fff; font-weight: bold; position: relative; top: 1px; }
+#helpPane { height: min(430px, calc(100vh - 250px)); min-height: 120px; overflow-y: scroll; background: #fff; border: 1px solid #999; border-top: none; padding: 4px 8px; outline: none; } .hpane { display: none; } .hpane.on { display: block; } .hpane th { display: none; } .hpane table { width: 100%; }
 #dlgHelp table { font-size: 12px; flex: 1; } #dlgHelp td:first-child { color: #036; width: 45%; } .cols { display: flex; gap: 24px; align-items: flex-start; } .cols > div { min-width: 220px; }
 /* 秀丸風 検索/置換ダイアログ */
 #dlgFind { min-width: 560px; }
@@ -279,19 +284,52 @@ kbd { background: #eee; border: 1px solid #bbb; border-radius: 3px; padding: 0 4
         <label><input type="checkbox" id="set-mdAuto"> .md ファイルで Markdown モードを自動的に有効にする</label>
         <label><input type="checkbox" id="set-mdPreview"> Markdown プレビューを表示</label></div>
       <div class="setpage" data-page="ime"><fieldset><legend>入力既定 (変換時のデフォルト)</legend>
-        <label>句点 <select id="set-kuten"><option>。</option><option>｡</option><option>．</option><option>.</option></select>　読点 <select id="set-touten"><option>、</option><option>､</option><option>，</option><option>,</option></select></label>
+        <div class="symgrid">
+          <span>句点</span><select id="set-kuten"><option value="。">。 (全角)</option><option value="｡">｡ (半角)</option><option value="．">． (全角ピリオド)</option><option value=".">. (半角ピリオド)</option></select>
+          <span>読点</span><select id="set-touten"><option value="、">、 (全角)</option><option value="､">､ (半角)</option><option value="，">， (全角カンマ)</option><option value=",">, (半角カンマ)</option></select>
+          <span>かぎ括弧</span><select id="set-symKagi"><option value="「」">「」 (全角)</option><option value="｢｣">｢｣ (半角)</option></select>
+          <span>丸括弧</span><select id="set-symParen"><option value="（）">（） (全角)</option><option value="()">() (半角)</option></select>
+          <span>長音・ハイフン</span><select id="set-symChouon"><option value="ー">ー (全角)</option><option value="ｰ">ｰ (半角)</option><option value="-">- (半角ハイフン)</option></select>
+          <span>中点 ( / キー)</span><select id="set-symNakaten"><option value="・">・ (全角)</option><option value="･">･ (半角)</option><option value="／">／ (全角スラッシュ)</option><option value="/">/ (半角スラッシュ)</option></select>
+          <span>感嘆符・疑問符</span><select id="set-symExq"><option value="！？">！？ (全角)</option><option value="!?">!? (半角)</option></select>
+          <span>波ダッシュ</span><select id="set-symTilde"><option value="〜">〜 (全角)</option><option value="~">~ (半角)</option></select>
+          <span>コロン・セミコロン</span><select id="set-symColon"><option value="：；">：； (全角)</option><option value=":;">:; (半角)</option></select>
+        </div>
+        <div class="symgrid sym2">
+          <select id="set-symAt" data-han="1"><option value="＠">＠ (全角)</option><option value="@">@ (半角)</option></select>
+          <select id="set-symHash" data-han="1"><option value="＃">＃ (全角)</option><option value="#"># (半角)</option></select>
+          <select id="set-symDollar" data-han="1"><option value="＄">＄ (全角)</option><option value="$">$ (半角)</option></select>
+          <select id="set-symPercent" data-han="1"><option value="％">％ (全角)</option><option value="%">% (半角)</option></select>
+          <select id="set-symAmp" data-han="1"><option value="＆">＆ (全角)</option><option value="&amp;">&amp; (半角)</option></select>
+          <select id="set-symAster" data-han="1"><option value="＊">＊ (全角)</option><option value="*">* (半角)</option></select>
+          <select id="set-symPlus" data-han="1"><option value="＋">＋ (全角)</option><option value="+">+ (半角)</option></select>
+          <select id="set-symEqual" data-han="1"><option value="＝">＝ (全角)</option><option value="=">= (半角)</option></select>
+          <select id="set-symLtGt" data-han="1"><option value="＜＞">＜＞ (全角)</option><option value="&lt;&gt;">&lt;&gt; (半角)</option></select>
+          <select id="set-symBrace" data-han="1"><option value="｛｝">｛｝ (全角)</option><option value="{}">{} (半角)</option></select>
+          <select id="set-symUnder" data-han="1"><option value="＿">＿ (全角)</option><option value="_">_ (半角)</option></select>
+          <select id="set-symCaret" data-han="1"><option value="＾">＾ (全角)</option><option value="^">^ (半角)</option></select>
+          <select id="set-symBar" data-han="1"><option value="｜">｜ (全角)</option><option value="|">| (半角)</option></select>
+          <select id="set-symYen" data-han="2"><option value="＼">＼ (全角)</option><option value="￥">￥ (全角円記号)</option><option value="\">\ (半角)</option></select>
+          <select id="set-symDq" data-han="1"><option value="”">” (全角)</option><option value="&quot;">&quot; (半角)</option></select>
+          <select id="set-symSq" data-han="1"><option value="’">’ (全角)</option><option value="&#x27;">&#x27; (半角)</option></select>
+          <select id="set-symBq" data-han="1"><option value="｀">｀ (全角)</option><option value="`">` (半角)</option></select>
+        </div>
+        <div style="margin:4px 0"><button id="symAllZen" style="min-width:0;padding:1px 10px">すべて全角</button> <button id="symAllHan" style="min-width:0;padding:1px 10px">すべて半角</button></div>
+        <div class="dim" style="margin:2px 0 6px">長音は、かなの直後では常に「ー」になります(例: らーめん)。設定は数字・英字の後や単独で打ったときに使われます。</div>
         <label><input type="checkbox" id="set-kataHankaku"> カタカナを半角(ｶﾅ)で確定する</label>
         <label><input type="checkbox" id="set-digitsZen"> 数字を全角で入力</label>
         <label><input type="checkbox" id="set-alphaZen"> 英字(Shift入力)を全角で確定</label>
         <label><input type="checkbox" id="set-spaceZen"> スペースキーで全角空白 (Shift+Space は半角)</label>
-        <label><input type="checkbox" id="set-bracketHan"> 「」を半角 ｢｣ にする</label>
-        <label><input type="checkbox" id="set-slashZen"> 「/」を「／」にする (OFF: 「・」)</label></fieldset>
+</fieldset>
         <label>起動時の入力モード <select id="set-startMode"><option value="hira">ひらがな</option><option value="kata">全角カタカナ</option><option value="hankata">半角カタカナ</option><option value="zenei">全角英数</option><option value="hanei">半角英数</option></select></label>
         <label><input type="checkbox" id="set-imeOnStart"> 起動時に IME を ON にする</label>
         <label><input type="checkbox" id="set-predictAuto"> 推測候補を自動表示</label>
         <label>候補ウィンドウの表示数 <input type="number" id="set-candPerPage" min="5" max="9" style="width:4em"></label></div>
       <div class="setpage" data-page="env"><fieldset><legend>表示言語</legend>
-        <label>表示言語/Display language : <select id="set-lang" data-noi18n><option value="ja">日本語/Japanese</option><option value="en">英語/English</option></select></label></fieldset></div>
+        <label>表示言語/Display language : <select id="set-lang" data-noi18n><option value="ja">日本語/Japanese</option><option value="en">英語/English</option></select></label></fieldset>
+        <fieldset><legend>キー配列</legend>
+        <label>エディタのキー配列 : <select id="set-keymap"><option value="hidemaru">秀丸エディタ (標準)</option><option value="vscode">Visual Studio Code</option><option value="atom">Atom</option><option value="emacs">Emacs</option><option value="vim">vi / Vim</option><option value="nano">nano</option><option value="vz">VZ Editor</option></select></label>
+        <div class="dim" style="margin:4px 0 0">選んだ配列のキー割り当ては F1 (その他→キー割り当て) で確認できます。かな漢字変換の入力中・変換中は、どの配列でも IME (ATOK 準拠) のキーが優先されます。<br>Ctrl+N・Ctrl+T・Ctrl+W は通常のタブではブラウザが処理するため、エディタで使うには全画面表示 (F11) にしてください。</div></fieldset></div>
       <div class="setpage" data-page="speech"><fieldset><legend>音声入力 (Web Speech API)</legend>
         <label>認識方式 <select id="set-speechMode"><option value="local">端末内のみ (音声を外部に送らない)</option><option value="auto">端末内があれば使い、無ければクラウド</option><option value="cloud">クラウド (Google / Microsoft のサーバー)</option></select></label>
         <div class="dim" style="margin:2px 0 4px 1.6em"><span id="speechStatus">確認中…</span> <button id="speechInstall" style="display:none;min-width:0;padding:1px 8px">言語パックをインストール</button></div>
@@ -323,11 +361,11 @@ kbd { background: #eee; border: 1px solid #bbb; border-radius: 3px; padding: 0 4
 </div></div></div>
 
 <div class="dialog" id="dlgAbout"><h3>バージョン情報<button class="close">✕</button></h3><div class="body">
-  <p><b>IME Editor</b> 1.10<br>HTML + JavaScript 製、内蔵日本語IME(連文節変換)付きテキストエディタ</p>
-  <p class="dim">変換辞書: Mozc OSS 辞書 (BSD-3-Clause, Google) を同梱。ATOK の辞書ファイル(.DIC)は その他→変換辞書 から取り込めます<br>IMEキー: ATOK準拠、エディタキー: 秀丸準拠</p></div></div>
+  <p><b>IME Editor</b> 1.14<br>HTML + JavaScript 製、内蔵日本語IME(連文節変換)付きテキストエディタ</p>
+  <p class="dim">変換辞書: Mozc OSS 辞書 (BSD-3-Clause, Google) を同梱。ATOK の辞書ファイル(.DIC)は その他→変換辞書 から取り込めます<br>IMEキー: ATOK準拠、エディタキー: 秀丸準拠</p></div><div class="btns"><button id="aboutOk" data-close>OK</button></div></div>
 
-<div class="dialog" id="dlgHelp" style="min-width:960px"><h3>キー割り当て (IME: ATOK準拠 / エディタ: 秀丸準拠)<button class="close">✕</button></h3><div class="body">
-<div class="cols">
+<div class="dialog" id="dlgHelp"><h3>キー割り当て<button class="close">✕</button></h3><div class="body"><div id="helpTabs"><button data-tab="km" data-noi18n></button><button data-tab="ime">IME (ATOKキー)</button><button data-tab="ed">エディタ (秀丸キー)</button></div>
+<div id="helpPane" tabindex="-1"><div class="hpane" data-tab="km" id="kmHelp" data-noi18n></div><div class="hpane" data-tab="ime">
 <table>
 <tr><th colspan="2">IME (ATOKキー)</th></tr>
 <tr><td>Ctrl+Space / 変換キー / ステータスバー</td><td>IME ON/OFF (ONは変換キーでも)</td></tr>
@@ -357,7 +395,7 @@ kbd { background: #eee; border: 1px solid #bbb; border-radius: 3px; padding: 0 4
 <tr><td>Ctrl+F7</td><td>単語登録</td></tr>
 <tr><td>@ で始めて英字</td><td>医療辞書の略語 (@agn → 急性糸球体腎炎)</td></tr>
 <tr><td>Shift+英字</td><td>英字入力 (そのまま Space で ICD/識別コード変換)</td></tr>
-</table>
+</table></div><div class="hpane" data-tab="ed">
 <table>
 <tr><th colspan="2">エディタ (秀丸キー)</th></tr>
 <tr><td>Ctrl+N / Ctrl+O / Ctrl+S / Ctrl+P</td><td>新規 / 開く / 上書き保存 / 印刷</td></tr>
@@ -391,7 +429,7 @@ kbd { background: #eee; border: 1px solid #bbb; border-radius: 3px; padding: 0 4
 <tr><td>ファイル → HTMLとして書き出し</td><td>Markdown を HTML に変換して保存</td></tr>
 </table></div>
 <p class="dim">※ OS側の日本語入力(MS-IME/ATOK)は<b>OFF</b>にして使います(半角/全角キー)。Ctrl+N / Ctrl+T / Ctrl+W はブラウザが横取りします。</p>
-</div></div>
+</div><div class="dim" style="margin-top:4px">← → : タブの切り替え　↑ ↓ PageUp PageDown : スクロール</div></div><div class="btns"><button id="helpOk" data-close>OK</button></div></div>
 
 <script src="js/i18n.js"></script>
 <script src="js/i18n_en.js"></script>
@@ -401,6 +439,7 @@ kbd { background: #eee; border: 1px solid #bbb; border-radius: 3px; padding: 0 4
 <script src="js/dictimport.js"></script>
 <script src="js/design.js"></script>
 <script src="js/keisen.js"></script>
+<script src="js/keymap.js"></script>
 <script src="dict/manifest.js"></script>
 <script src="js/editor.js"></script>
 </body>

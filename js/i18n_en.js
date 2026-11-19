@@ -81,6 +81,14 @@ const I18N_EN = { dict: {
 '全角罫線  ─│┌┐(Z)': 'Full-width box characters  ─│┌┐(&Z)', '半角罫線  +-|(H)': '&Half-width ASCII  +-|', '表に行を挿入(I)': '&Insert table row',
 '罫線: Alt+矢印で細線、Alt+Shift+矢印で太線、Alt+Ctrl+矢印で消去': 'Ruled lines: Alt+Arrow draws a thin line, Alt+Shift+Arrow a thick line, Alt+Ctrl+Arrow erases', '半角罫線 (+-|) で描きます': 'Drawing with half-width ASCII (+-|)', '全角罫線で描きます': 'Drawing with full-width box characters',
 '表の行(縦の罫線がある行)にカーソルを置いてください': 'Place the cursor on a table row (a line with vertical rules)', 'Alt+矢印 / Alt+Shift+矢印': 'Alt+Arrow / Alt+Shift+Arrow', '罫線を引く (細線 / 太線)。交差や角は自動で ┼ ┌ などになる': 'Draw ruled lines (thin / thick). Crossings and corners become ┼ ┌ etc. automatically',
+'かぎ括弧': 'Corner brackets', '丸括弧': 'Parentheses', '長音・ハイフン': 'Long vowel mark / hyphen', '中点 ( / キー)': 'Middle dot ( / key)', '感嘆符・疑問符': 'Exclamation / question', '波ダッシュ': 'Wave dash', 'コロン・セミコロン': 'Colon / semicolon',
+'長音は、かなの直後では常に「ー」になります(例: らーめん)。設定は数字・英字の後や単独で打ったときに使われます。': 'Right after kana the long vowel mark is always "ー" (e.g. らーめん). The setting applies after digits or letters, or when typed alone.',
+'すべて全角': 'All full-width', 'すべて半角': 'All half-width', 'キー配列': 'Key bindings', 'エディタのキー配列 :': 'Editor key bindings :', '秀丸エディタ (標準)': 'Hidemaru Editor (default)',
+'選んだ配列のキー割り当ては F1 (その他→キー割り当て) で確認できます。かな漢字変換の入力中・変換中は、どの配列でも IME (ATOK 準拠) のキーが優先されます。': 'Press F1 (Other → Key bindings) to see the keys of the selected scheme. While composing or converting kana, the IME (ATOK-style) keys take priority in every scheme.',
+'Ctrl+N・Ctrl+T・Ctrl+W は通常のタブではブラウザが処理するため、エディタで使うには全画面表示 (F11) にしてください。': 'In a normal tab the browser handles Ctrl+N, Ctrl+T and Ctrl+W itself; switch to full screen (F11) to use them in the editor.',
+'全画面表示(F)': '&Full screen', '全画面表示: F11 で戻ります': 'Full screen: press F11 to leave', '全画面表示にできませんでした': 'Could not enter full screen',
+'罫線モード (矢印キーだけで描く)(M)': 'Line drawing &mode (arrow keys only)', '罫線モード: 矢印で細線、Shift+矢印で太線、Ctrl+矢印で消去、Esc で終了': 'Line drawing mode: Arrow = thin, Shift+Arrow = thick, Ctrl+Arrow = erase, Esc = leave', '罫線モードを終了しました': 'Left line drawing mode',
+'キー割り当て': 'Key bindings', '← → : タブの切り替え　↑ ↓ PageUp PageDown : スクロール': '← → : switch tabs   ↑ ↓ PageUp PageDown : scroll',
 // ---- 色の指定
 '色の指定': 'Color', 'システム・背景色': 'System background', 'システム・文字色': 'System text', '色 | 純色': 'Color | Solid', '色合い(E):': 'Hue(E):', '鮮やかさ(S):': 'Sat(S):', '明るさ(L):': 'Lum(L):', '赤(R):': 'Red(R):', '緑(G):': 'Green(G):', '青(B):': 'Blue(B):',
 // ---- バージョン情報
@@ -113,6 +121,7 @@ const I18N_EN = { dict: {
 'Tab:選択 Shift+Enter:確定': 'Tab: select  Shift+Enter: commit',
 }, rules: [
   [/^(\d+) 行 (\d+) 桁$/, 'Ln $1, Col $2'],
+  [/^(.+) \((全角|半角|全角円記号|全角ピリオド|半角ピリオド|全角カンマ|半角カンマ|半角ハイフン|全角スラッシュ|半角スラッシュ)\)$/, (m, c, k) => c + ' (' + ({ '全角': 'full-width', '全角円記号': 'full-width yen', '半角': 'half-width', '全角ピリオド': 'full-width period', '半角ピリオド': 'half-width period', '全角カンマ': 'full-width comma', '半角カンマ': 'half-width comma', '半角ハイフン': 'half-width hyphen', '全角スラッシュ': 'full-width slash', '半角スラッシュ': 'half-width slash' })[k] + ')'],
   [/^(\d+) 行 \/ (\d+) 文字(?: \/ 選択 (\d+) 文字)?( \[範囲選択\])?( ●記録中)?$/, (m, l, c, s, sm, rec) => `${l} lines / ${c} chars` + (s ? ` / ${s} selected` : '') + (sm ? ' [SELECT]' : '') + (rec ? ' ●REC' : '')],
   [/^辞書 (\d+)\/(\d+)$/, 'Dict $1/$2'],
   [/^(挿入|上書)( \/ Markdown)?$/, (m, a, b) => (a === '挿入' ? 'INS' : 'OVR') + (b || '')],
