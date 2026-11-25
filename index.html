@@ -36,7 +36,8 @@ html.theme-dark #ruler { background: #333; color: #ddd; }
 #main { flex: 1; display: flex; min-height: 0; }
 #editor { flex: 1; overflow: auto; background: var(--bg); position: relative; outline: none; cursor: text; min-width: 0; }
 #editor.nofocus .caret { opacity: .25; animation: none; }
-#text { font-family: "MS Gothic", "ＭＳ ゴシック", "BIZ UDGothic", Consolas, monospace; font-size: var(--fs); line-height: 1.45; color: var(--fg); min-height: 100%; min-width: max-content; padding-bottom: 50vh; tab-size: var(--tab); -moz-tab-size: var(--tab); }
+#fontSample { white-space: pre; background: #fff; color: #000; border: 1px solid #999; padding: 4px 8px; font-size: 16px; line-height: 1.35; overflow: hidden; }
+#text { font-family: var(--edfont, "MS Gothic", "ＭＳ ゴシック", "BIZ UDGothic", Consolas, monospace); font-size: var(--fs); line-height: 1.45; color: var(--fg); min-height: 100%; min-width: max-content; padding-bottom: 50vh; tab-size: var(--tab); -moz-tab-size: var(--tab); }
 #text.wrap { min-width: 0; }
 .line { display: flex; white-space: pre; }
 #text.wrap .line .lc { white-space: pre-wrap; word-break: break-all; } .nb { white-space: pre; }
@@ -239,7 +240,15 @@ kbd { background: #eee; border: 1px solid #bbb; border-radius: 3px; padding: 0 4
       </div></div>
     <div id="setPages">
       <div class="setpage" data-page="font"><fieldset><legend>フォント</legend>
-        <label>文字サイズ <input type="number" id="set-fontSize" min="8" max="40" style="width:5em"> px</label></fieldset></div>
+        <label>フォント名 <select id="set-fontFamily" data-noi18n style="min-width:22em"></select></label>
+        <label>文字サイズ <input type="number" id="set-fontSize" min="8" max="40" style="width:5em"> px</label>
+        <div style="margin:6px 0 2px"><button id="fontScan" style="min-width:0;padding:1px 10px">インストールされているフォントを調べる</button> <span id="fontScanMsg" class="dim" data-noi18n></span></div>
+        <div class="dim">等幅フォントだけを一覧に出します。「調べる」を押すとブラウザがフォントの利用許可を求めるので、許可してください (Chrome / Edge)。許可しない場合は、代表的な等幅フォントの中から入っているものだけが出ます。</div>
+        </fieldset>
+        <fieldset><legend>サンプル</legend><div id="fontSample" data-noi18n>0123456789ABCDEFGHIJabcdefghij|
+あいうえおかきくけこ漢字仮名交|
+ｱｲｳｴｵｶｷｸｹｺ「」。、┌─┬─┼┐|
+iiiiiiiiiiWWWWWWWWWW..........|</div><div class="dim">右端の | が縦にそろっていれば、桁がずれないフォントです。</div></fieldset></div>
       <div class="setpage" data-page="layout"><fieldset><legend>折り返し</legend>
         <label><input type="radio" name="wrapmode" value="win"> ウィンドウ幅に合わせる(U)</label>
         <label><input type="radio" name="wrapmode" value="max"> 最大(M)</label>
@@ -361,7 +370,7 @@ kbd { background: #eee; border: 1px solid #bbb; border-radius: 3px; padding: 0 4
 </div></div></div>
 
 <div class="dialog" id="dlgAbout"><h3>バージョン情報<button class="close">✕</button></h3><div class="body">
-  <p><b>IME Editor</b> 1.14<br>HTML + JavaScript 製、内蔵日本語IME(連文節変換)付きテキストエディタ</p>
+  <p><b>IME Editor</b> 1.16<br>HTML + JavaScript 製、内蔵日本語IME(連文節変換)付きテキストエディタ</p>
   <p class="dim">変換辞書: Mozc OSS 辞書 (BSD-3-Clause, Google) を同梱。ATOK の辞書ファイル(.DIC)は その他→変換辞書 から取り込めます<br>IMEキー: ATOK準拠、エディタキー: 秀丸準拠</p></div><div class="btns"><button id="aboutOk" data-close>OK</button></div></div>
 
 <div class="dialog" id="dlgHelp"><h3>キー割り当て<button class="close">✕</button></h3><div class="body"><div id="helpTabs"><button data-tab="km" data-noi18n></button><button data-tab="ime">IME (ATOKキー)</button><button data-tab="ed">エディタ (秀丸キー)</button></div>
@@ -438,6 +447,7 @@ kbd { background: #eee; border: 1px solid #bbb; border-radius: 3px; padding: 0 4
 <script src="js/speech.js"></script>
 <script src="js/dictimport.js"></script>
 <script src="js/design.js"></script>
+<script src="js/fonts.js"></script>
 <script src="js/keisen.js"></script>
 <script src="js/keymap.js"></script>
 <script src="dict/manifest.js"></script>

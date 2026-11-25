@@ -9,7 +9,7 @@ const esc = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, 
 /* ---------------------------------------------------------------- 設定 */
 const Settings = {
   key: 'jpime_editor_settings',
-  data: { fontSize: 15, wrap: false, showMarks: true, lineNumbers: true, ruler: true, statusBar: true, curLine: true, theme: 'light',
+  data: { fontSize: 15, fontFamily: '', wrap: false, showMarks: true, lineNumbers: true, ruler: true, statusBar: true, curLine: true, theme: 'light',
           autoIndent: true, tabWidth: 4, tabSpaces: false, wrapCol: 80,
           // IME 入力既定
           digitsZen: false, spaceZen: true, slashZen: false, predictAuto: true, candPerPage: 9,
@@ -252,6 +252,7 @@ class Editor {
   applySettings() {
     const d = Settings.data;
     document.documentElement.style.setProperty('--fs', d.fontSize + 'px');
+    document.documentElement.style.setProperty('--edfont', Fonts.css(d.fontFamily));
     document.documentElement.style.setProperty('--tab', d.tabWidth);
     document.documentElement.classList.toggle('theme-dark', d.theme === 'dark');
     this.el.text.classList.toggle('wrap', d.wrap);
@@ -1235,7 +1236,18 @@ const UI = {
     // 設定ダイアログ: コントロールは開いたときに現在値を読み込み、[OK] で初めて反映・保存する(キャンセル/✕/Esc は変更なし)
     this.setBinds = [];
     const bindSet = (sel, key, conv, isCheck) => { const el = $(sel); if (el) this.setBinds.push({ el, key, conv, isCheck }); };
-    bindSet('#set-fontSize', 'fontSize', v => +v); bindSet('#set-tabWidth', 'tabWidth', v => +v);
+    bindSet('#set-fontFamily', 'fontFamily'); bindSet('#set-fontSize', 'fontSize', v => +v);
+    const fontPrev = () => { $('#fontSample').style.fontFamily = Fonts.css($('#set-fontFamily').value); };
+    $('#set-fontFamily').addEventListener('change', fontPrev);
+    $('#fontScan').addEventListener('click', async () => {
+      const en = Settings.data.lang === 'en', msg = $('#fontScanMsg'), cur = $('#set-fontFamily').value;
+      msg.textContent = en ? 'Checking...' : '調べています...';
+      const r = await Fonts.scanAll(); Fonts.fill($('#set-fontFamily'), cur); fontPrev();
+      const nj = r.list.filter(f => f.k === 'jp').length, nl = r.list.length - nj;
+      msg.textContent = r.full ? (en ? `${r.total} fonts checked: ${nj} monospaced (Japanese aligned), ${nl} Latin-only` : `${r.total} 個のフォントを調べました: 等幅 ${nj} 個、英数字のみ等幅 ${nl} 個`)
+        : r.error === 'unsupported' ? (en ? `This browser cannot list fonts; checked common monospaced fonts only (${r.list.length} found)` : `このブラウザではフォント一覧を取得できないため、代表的な等幅フォントだけを調べました (${r.list.length} 個)`)
+        : (en ? `Permission was not granted; checked common monospaced fonts only (${r.list.length} found)` : `許可されなかったため、代表的な等幅フォントだけを調べました (${r.list.length} 個)`);
+    }); bindSet('#set-tabWidth', 'tabWidth', v => +v);
     for (const id of ['symKagi', 'symParen', 'symChouon', 'symNakaten', 'symExq', 'symTilde', 'symColon', ...SYM_MORE.map(x => x[0])]) bindSet('#set-' + id, id);
     bindSet('#set-keymap', 'keymap');
     // 記号を一括で全角/半角にする (OK を押すまでは確定しない)
@@ -1316,6 +1328,7 @@ const UI = {
   setPage(p) { if (this.setPageLast && this.setGroup) this.setPageLast[this.setGroup] = p; this.setPageCur = p; document.querySelectorAll('#setTree div').forEach(t => t.classList.toggle('on', t.dataset.page === p)); document.querySelectorAll('.setpage').forEach(t => t.classList.toggle('on', t.dataset.page === p)); if (p === 'design') { Design.renderList(); Design.renderProps(); } },
   loadSettingsControls() {
     this.ed._symMap();
+    Fonts.fill($('#set-fontFamily'), Settings.data.fontFamily || ''); $('#fontSample').style.fontFamily = Fonts.css(Settings.data.fontFamily); $('#fontScanMsg').textContent = '';
     for (const b of this.setBinds) { if (b.isCheck) b.el.checked = !!Settings.data[b.key]; else b.el.value = Settings.data[b.key]; }
     const d = Settings.data, tw = [2, 4, 8].includes(+d.tabWidth) ? String(d.tabWidth) : 'c';
     document.querySelector(`input[name=tabw][value="${tw}"]`).checked = true;

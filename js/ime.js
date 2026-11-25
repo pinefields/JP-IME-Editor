@@ -210,7 +210,10 @@ const JP = {
     if (o >= 0xFF61 && o <= 0xFF9F) return 1;
     return 2;
   },
-  normKey(s) { return JP.kataToHira(s).replace(/[A-Z]/g, c => c.toLowerCase()); }
+  normKey(s) { return JP.kataToHira(s).replace(/[A-Z]/g, c => c.toLowerCase()); },
+  /** 辞書を引くときだけ使う形 (文字数は変えない): 全角の英数字→半角、ハイフン類 (- － ｰ ‐) →「ー」。
+   *  記号や数字の全角/半角設定を変えても、郵便番号 (259ー1234) などが引けるようにする */
+  dictKey(s) { return /[０-９Ａ-Ｚａ-ｚ\-－ｰ‐]/.test(s) ? s.replace(/[０-９Ａ-Ｚａ-ｚ]/g, c => String.fromCharCode(c.charCodeAt(0) - 0xFEE0)).replace(/[A-Z]/g, c => c.toLowerCase()).replace(/[-－ｰ‐]/g, 'ー') : s; },
 };
 
 /* ---------------------------------------------------------------- ローマ字かな変換 */
@@ -368,8 +371,9 @@ class Converter {
   }
 
   _lookupAll(key) {
-    const a = IMEDICT.lookup(key);
-    const u = this.user.lookup(key);
+    let a = IMEDICT.lookup(key), u = this.user.lookup(key);
+    const k2 = JP.dictKey(key);
+    if (k2 !== key) { a = a.concat(IMEDICT.lookup(k2)); u = u.concat(this.user.lookup(k2)); }
     return u.length ? u.concat(a) : a;
   }
 
@@ -559,7 +563,8 @@ class Converter {
     const key = JP.normKey(prefix);
     const out = [], seen = new Set();
     for (const p of this.learner.predict(key, limit)) if (!seen.has(p.s)) { seen.add(p.s); out.push({ s: p.s, reading: p.reading, cm: '', learned: true }); }
-    const keys = this.user.prefixKeys(key, 20).concat(IMEDICT.prefixKeys(key, 60));
+    const k2 = JP.dictKey(key);
+    const keys = this.user.prefixKeys(key, 20).concat(IMEDICT.prefixKeys(key, 60), k2 !== key ? IMEDICT.prefixKeys(k2, 60) : []);
     const scored = [];
     for (const k of keys) {
       const ents = this._lookupAll(k); if (!ents.length) continue;
@@ -609,7 +614,7 @@ class IME {
     return this._modeText(text);
   }
   _modeText(t) {
-    if (this.alpha) return this.opts.alphaZen ? JP.toZenkakuAscii(t) : t;
+    if (this.alpha) return (this.opts.alphaZen && !this._fHan()) ? JP.toZenkakuAscii(t) : t;
     if (this.mode === 'kata') return JP.hiraToKata(t);
     if (this.mode === 'hankata') return JP.toHankakuKana(t);
     return t;
@@ -642,7 +647,7 @@ class IME {
   _commitText() {
     let t;
     if (this.state === 'convert') t = this.segs.map(s => s.cands[s.idx].s).join('');
-    else { this._flushPending(); t = this._modeText(this.kana); if (this.alpha && this.opts.alphaZen && this.state === 'input') t = JP.toZenkakuAscii(t);
+    else { this._flushPending(); t = this._modeText(this.kana); if (this.alpha && this.opts.alphaZen && this.state === 'input' && !this._fHan()) t = JP.toZenkakuAscii(t);
       if (this.alpha && this.kana === '@' && this.opts.atZen) t = '＠'; }                 // @ だけで確定 (略語入力にならなかった) → 記号の設定に従う
     return this._post(t);
   }
@@ -833,6 +838,8 @@ class IME {
     return null;
   }
   /** F6〜F10: 読み全体を文字種変換した「確定待ち」状態にする */
+  /** F8 / F10 (半角) を押した直後か。その間は「英字を全角で確定」の設定より半角を優先する */
+  _fHan() { return !!this.fcycle && (this.fcycle.kind === 'hankata' || this.fcycle.kind === 'hanei'); }
   _applyFkey(kind) {
     this._flushPending();
     const base = this.fcycle && this.fcycle.base ? this.fcycle.base : this.kana;
@@ -844,7 +851,7 @@ class IME {
     const rawSeq = raw.replace(/[^ -~]/g, '');
     if (kind === 'hira') { out = JP.kataToHira(base); this.alpha = false; }
     else if (kind === 'kata') { out = JP.hiraToKata(base); this.alpha = true; }
-    else if (kind === 'hankata') { out = JP.toHankakuKana(base); this.alpha = true; }
+    else if (kind === 'hankata') { out = JP.toHankakuAscii(JP.toHankakuKana(base)); this.alpha = true; }      // F8 = 半角: かなは半角カナ、全角の英数字・記号も半角に
     else if (kind === 'zenei' || kind === 'hanei') {
       const seq = rawSeq || base;
       const v = [seq.toLowerCase(), seq.toUpperCase(), seq.charAt(0).toUpperCase() + seq.slice(1).toLowerCase()][st % 3];
@@ -916,7 +923,7 @@ class IME {
       // 変換中のF6〜: 注目文節のみ文字種変換 (ATOK: 注目文節が対象)
       const span = this.kana.substring(seg.start, seg.end), rawSpan = '';
       let out = span;
-      if (fk === 'hira') out = span; else if (fk === 'kata') out = JP.hiraToKata(span); else if (fk === 'hankata') out = JP.toHankakuKana(span);
+      if (fk === 'hira') out = span; else if (fk === 'kata') out = JP.hiraToKata(span); else if (fk === 'hankata') out = JP.toHankakuAscii(JP.toHankakuKana(span)); else if (fk === 'hanei') out = JP.toHankakuAscii(span);
       else if (fk === 'zenei') out = JP.toZenkakuAscii(span); else out = span;
       const idx = seg.cands.findIndex(c => c.s === out);
       if (idx >= 0) seg.idx = idx; else { seg.cands.push({ s: out, r: ID_NOUN, l: ID_NOUN, cost: 99999, words: [], cm: '' }); seg.idx = seg.cands.length - 1; }

@@ -89,6 +89,8 @@ const I18N_EN = { dict: {
 '全画面表示(F)': '&Full screen', '全画面表示: F11 で戻ります': 'Full screen: press F11 to leave', '全画面表示にできませんでした': 'Could not enter full screen',
 '罫線モード (矢印キーだけで描く)(M)': 'Line drawing &mode (arrow keys only)', '罫線モード: 矢印で細線、Shift+矢印で太線、Ctrl+矢印で消去、Esc で終了': 'Line drawing mode: Arrow = thin, Shift+Arrow = thick, Ctrl+Arrow = erase, Esc = leave', '罫線モードを終了しました': 'Left line drawing mode',
 'キー割り当て': 'Key bindings', '← → : タブの切り替え　↑ ↓ PageUp PageDown : スクロール': '← → : switch tabs   ↑ ↓ PageUp PageDown : scroll',
+'フォント名': 'Font', 'サンプル': 'Sample', 'インストールされているフォントを調べる': 'Check installed fonts', '右端の | が縦にそろっていれば、桁がずれないフォントです。': 'If the | at the right edge lines up vertically, columns stay aligned in this font.',
+'等幅フォントだけを一覧に出します。「調べる」を押すとブラウザがフォントの利用許可を求めるので、許可してください (Chrome / Edge)。許可しない場合は、代表的な等幅フォントの中から入っているものだけが出ます。': 'Only monospaced fonts are listed. When you press the button the browser asks for permission to use local fonts; allow it (Chrome / Edge). Without permission, only the common monospaced fonts that are installed are listed.',
 // ---- 色の指定
 '色の指定': 'Color', 'システム・背景色': 'System background', 'システム・文字色': 'System text', '色 | 純色': 'Color | Solid', '色合い(E):': 'Hue(E):', '鮮やかさ(S):': 'Sat(S):', '明るさ(L):': 'Lum(L):', '赤(R):': 'Red(R):', '緑(G):': 'Green(G):', '青(B):': 'Blue(B):',
 // ---- バージョン情報

@@ -1,4 +1,4 @@
-# IME Editor — a text editor with built-in Japanese input (HTML + JavaScript)  v1.14
+# IME Editor — a text editor with built-in Japanese input (HTML + JavaScript)  v1.16
 
 **English** | [日本語](README.md)
 
@@ -47,6 +47,7 @@ js/editor.js         Editor (buffer, rendering, Hidemaru-style menus/keys, find/
 js/markdown.js       Markdown renderer / syntax highlighting
 js/speech.js         Voice input (Web Speech API)
 js/design.js         Colour settings and the colour picker dialog
+js/fonts.js          Font selection (detects which installed fonts are monospaced)
 js/keisen.js         Drawing and erasing ruled lines
 js/keymap.js         Key schemes (VS Code / Atom / Emacs / vi / nano / VZ)
 js/i18n.js           Display-language switching
@@ -113,7 +114,7 @@ and match highlighting. In the replacement string, `\0`–`\9` refer to groups.
 
 As in Hidemaru, settings are split into two dialogs. In both, switch pages with "Target" on the left; [OK] applies and saves, [Cancel] discards.
 
-- **Other → Configuration for each file type**: Font / Form (wrapping) · Tab (2/4/8/custom, insert spaces with the Tab key) · Indent (auto indent) /
+- **Other → Configuration for each file type**: Font (choose among monospaced fonts; [Check installed fonts] lists them and measures character widths to separate fonts whose Japanese characters are exactly two columns wide from fonts that are monospaced for Latin only) / Form (wrapping) · Tab (2/4/8/custom, insert spaces with the Tab key) · Indent (auto indent) /
   Design (list of places with text colour, background colour and style; reset; save/load colour schemes) · Showing1 (line-end character, EOF, tab character, full-width space) · Showing2 (ruler, line numbers, cursor line)
 - **Other → Environment**: File (encoding, line ends and BOM for new files) / View and operation (status bar, theme) / Markdown / Kana-kanji conversion (IME) / Voice input / Environment (display language, key bindings)
 
